@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incremental-ridge-state.schema.json",
+  "title": "解析增量岭回归状态",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_type",
+    "schema_version",
+    "method_id",
+    "method_version",
+    "state_version",
+    "model",
+    "objective",
+    "feature_contract",
+    "statistics",
+    "parameters",
+    "model_binding",
+    "lineage"
+  ],
+  "properties": {
+    "report_type": {"const": "IncrementalRidgeState"},
+    "schema_version": {"const": "0.1"},
+    "method_id": {"const": "incremental_ridge_closed_form"},
+    "method_version": {"const": "0.1"},
+    "state_version": {"type": "integer", "minimum": 1},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_features", "output_features", "fit_intercept", "dtype"],
+      "properties": {
+        "input_features": {"type": "integer", "minimum": 1, "maximum": 256},
+        "output_features": {"type": "integer", "minimum": 1, "maximum": 64},
+        "fit_intercept": {"type": "boolean"},
+        "dtype": {"const": "float64"}
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loss", "regularization", "regularization_strength", "regularize_intercept"],
+      "properties": {
+        "loss": {"const": "sum_squared_error"},
+        "regularization": {"const": "l2"},
+        "regularization_strength": {"type": "number", "minimum": 0},
+        "regularize_intercept": {"type": "boolean"}
+      }
+    },
+    "feature_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_schema_sha256", "target_schema_sha256", "preprocessing_ref"],
+      "properties": {
+        "feature_schema_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "target_schema_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "preprocessing_ref": {"type": ["string", "null"]}
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_count", "gram_matrix", "feature_target_cross_product"],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 1},
+        "gram_matrix": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}},
+        "feature_target_cross_product": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}}
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weight", "bias"],
+      "properties": {
+        "weight": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
+        "bias": {"type": ["array", "null"], "items": {"type": "number"}}
+      }
+    },
+    "model_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter_sha256", "artifact_ref", "artifact_sha256"],
+      "properties": {
+        "parameter_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "artifact_ref": {"type": ["string", "null"]},
+        "artifact_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "lineage": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["previous_state_sha256", "update_request_sha256"],
+          "properties": {
+            "previous_state_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "update_request_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        }
+      ]
+    }
+  }
+}

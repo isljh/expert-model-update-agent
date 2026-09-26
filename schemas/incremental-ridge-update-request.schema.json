@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incremental-ridge-update-request.schema.json",
+  "title": "解析增量岭回归更新请求",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["report_type", "schema_version", "method_id", "method_version", "plan_binding", "old_state", "new_batch"],
+  "properties": {
+    "report_type": {"const": "IncrementalRidgeUpdateRequest"},
+    "schema_version": {"const": "0.1"},
+    "method_id": {"const": "incremental_ridge_closed_form"},
+    "method_version": {"const": "0.1"},
+    "plan_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "plan_version", "update_plan_sha256"],
+      "properties": {
+        "task_id": {"type": "string", "minLength": 1},
+        "plan_version": {"type": "integer", "minimum": 1},
+        "update_plan_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "old_state": {"$ref": "incremental-ridge-state.schema.json"},
+    "new_batch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_schema_sha256", "target_schema_sha256", "features", "targets"],
+      "properties": {
+        "feature_schema_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "target_schema_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "features": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 1, "items": {"type": "number"}}},
+        "targets": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 1, "items": {"type": "number"}}}
+      }
+    }
+  }
+}

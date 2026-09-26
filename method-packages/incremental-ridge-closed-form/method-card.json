@@ -1,0 +1,100 @@
+{
+  "report_type": "IncrementalLearningMethodCard",
+  "schema_version": "0.1",
+  "method_id": "incremental_ridge_closed_form",
+  "method_version": "0.1",
+  "artifact_kind": "full_method",
+  "name": {
+    "zh": "基于充分统计量的解析增量岭回归",
+    "en": "Closed-form Incremental Ridge Regression with Sufficient Statistics"
+  },
+  "decision_contract": {
+    "supported_task": "regression",
+    "supported_model": "affine_linear",
+    "scenario": "same_task_new_samples",
+    "fixed_objective": "sum_squared_error + lambda * l2_weight_penalty",
+    "hard_preconditions": [
+      "模型是单输出或多输出仿射线性回归",
+      "训练目标是平方误差总和加可为零的 L2 参数正则",
+      "旧状态包含与当前参数一致的 Gram 矩阵和特征-目标交叉乘积",
+      "新旧输入维度、输出维度、特征顺序、目标语义和预处理保持不变",
+      "更新期间不改变 lambda 和 intercept 正则规则"
+    ],
+    "ineligible_when": [
+      "只有旧权重且无法取得旧充分统计量或旧数据",
+      "损失为交叉熵、MAE、Huber、分位数或其他非平方损失",
+      "参数正则包含 L1 或其他非 L2 项",
+      "目标对象只是非线性网络中的一个 Linear 层",
+      "输入或输出契约发生变化"
+    ],
+    "structure_growth": "forbidden",
+    "old_sample_replay": "not_required_when_sufficient_statistics_are_valid"
+  },
+  "execution_contract": {
+    "objective_scaling": "sum_not_mean",
+    "state": ["sample_count", "gram_matrix", "feature_target_cross_product", "parameters"],
+    "parameter_policy": "replace_weight_and_optional_bias_without_changing_shape",
+    "retention_mechanism": "accumulated_unregularized_sufficient_statistics",
+    "numerical_policy": [
+      "使用 float64",
+      "使用线性方程求解器而不是显式矩阵求逆",
+      "报告系统矩阵条件数",
+      "条件数大于 1e12 时标记 ill_conditioned"
+    ],
+    "execution_preconditions": [
+      "执行 Agent 已核实目标项目中的模型、目标函数、特征契约和 checkpoint 绑定",
+      "已批准的 UpdatePlan 明确选择本方法及同一版本",
+      "原 checkpoint 和原增量状态不会被覆盖"
+    ],
+    "replan_triggers": [
+      "旧状态与参数不一致",
+      "新批次特征或目标契约不匹配",
+      "法方程不可解或出现非有限数值",
+      "项目实际目标函数或模型形式与方法卡不一致"
+    ],
+    "limitations": [
+      "工具只接收内联、标准化的小规模矩阵，不读取任意项目或数据路径",
+      "新批次 RMSE 只描述当前批次，不证明旧能力保持",
+      "解析更新不是多轮 epoch 训练",
+      "新状态中的项目 checkpoint 引用必须由执行 Agent 保存产物后另行绑定"
+    ]
+  },
+  "components": [
+    {
+      "component_id": "incremental_ridge_core",
+      "kind": "python_library",
+      "entrypoint": "expert_model_update.methods.incremental_ridge",
+      "purpose": "检查旧状态并执行充分统计量更新和线性方程求解。"
+    },
+    {
+      "component_id": "inspect_incremental_ridge_state",
+      "kind": "pi_tool",
+      "entrypoint": "inspect_incremental_ridge_state",
+      "purpose": "在更新前检查状态、参数、摘要、目标函数和数值条件。"
+    },
+    {
+      "component_id": "update_incremental_ridge",
+      "kind": "pi_tool",
+      "entrypoint": "update_incremental_ridge",
+      "purpose": "对已标准化的小规模新批次执行有界解析更新并返回新状态。"
+    },
+    {
+      "component_id": "joint_solution_equivalence",
+      "kind": "validation_rule",
+      "entrypoint": "tests.test_incremental_ridge",
+      "purpose": "用受控数据验证增量解与合并数据的一次性岭回归解一致。"
+    }
+  ],
+  "references": [
+    {
+      "kind": "textbook",
+      "citation": "Golub, G. H. and Van Loan, C. F. Matrix Computations, 4th edition.",
+      "url": null
+    },
+    {
+      "kind": "textbook",
+      "citation": "Hastie, T., Tibshirani, R., and Friedman, J. The Elements of Statistical Learning, 2nd edition.",
+      "url": "https://hastie.su.domains/ElemStatLearn/"
+    }
+  ]
+}

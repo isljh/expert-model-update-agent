@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incremental-learning-method-card.schema.json",
+  "title": "增量学习方法卡",
+  "description": "供更新决策 Agent 和执行 Agent 共享的版本化方法知识；方法卡不等于项目改造代码。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_type",
+    "schema_version",
+    "method_id",
+    "method_version",
+    "artifact_kind",
+    "name",
+    "decision_contract",
+    "execution_contract",
+    "components",
+    "references"
+  ],
+  "properties": {
+    "report_type": {"const": "IncrementalLearningMethodCard"},
+    "schema_version": {"const": "0.1"},
+    "method_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+    "method_version": {"type": "string", "minLength": 1},
+    "artifact_kind": {"enum": ["full_method", "mechanism", "baseline"]},
+    "name": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh", "en"],
+      "properties": {
+        "zh": {"type": "string", "minLength": 1},
+        "en": {"type": "string", "minLength": 1}
+      }
+    },
+    "decision_contract": {"type": "object"},
+    "execution_contract": {"type": "object"},
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component_id", "kind", "entrypoint", "purpose"],
+        "properties": {
+          "component_id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["python_library", "pi_tool", "validation_rule"]},
+          "entrypoint": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "citation"],
+        "properties": {
+          "kind": {"enum": ["textbook", "paper", "documentation"]},
+          "citation": {"type": "string", "minLength": 1},
+          "url": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

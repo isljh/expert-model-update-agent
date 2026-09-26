@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-input.schema.json",
+  "title": "模型更新任务输入",
+  "description": "人类、更新决策 Agent 与校验工具共同使用的最小 TaskInput v0.2 契约。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "task_input_version",
+    "request",
+    "assets",
+    "requirements",
+    "intake"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.2"
+    },
+    "task_id": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "task_input_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "assets": {
+      "$ref": "#/$defs/assets"
+    },
+    "requirements": {
+      "$ref": "#/$defs/requirements"
+    },
+    "intake": {
+      "$ref": "#/$defs/intake"
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_prompt",
+        "update_goal"
+      ],
+      "properties": {
+        "raw_prompt": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "update_goal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "summary",
+            "reason",
+            "status"
+          ],
+          "properties": {
+            "summary": {
+              "$ref": "#/$defs/nullableString"
+            },
+            "reason": {
+              "$ref": "#/$defs/nullableString"
+            },
+            "status": {
+              "enum": [
+                "missing",
+                "proposed",
+                "confirmed"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_project",
+        "base_model",
+        "new_data"
+      ],
+      "properties": {
+        "target_project": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "location"
+          ],
+          "properties": {
+            "location": {
+              "$ref": "#/$defs/nullableString"
+            }
+          }
+        },
+        "base_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "checkpoint",
+            "discovery_authorized"
+          ],
+          "properties": {
+            "checkpoint": {
+              "$ref": "#/$defs/nullableString"
+            },
+            "config": {
+              "description": "人类明确提供、与原模型或 checkpoint 关联的可选配置文件；未提供时为 null 或省略，后续阶段不得自动搜索替代文件。",
+              "$ref": "#/$defs/nullableString"
+            },
+            "discovery_authorized": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "new_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "location",
+            "allowed_uses"
+          ],
+          "properties": {
+            "location": {
+              "$ref": "#/$defs/nullableString"
+            },
+            "allowed_uses": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "analysis",
+                  "training",
+                  "validation",
+                  "evaluation"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilities_to_preserve",
+        "success_expectation"
+      ],
+      "properties": {
+        "capabilities_to_preserve": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "items"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "unconfirmed",
+                "specified",
+                "none"
+              ]
+            },
+            "items": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            }
+          }
+        },
+        "success_expectation": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "requiredQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "target_fields",
+        "question",
+        "status",
+        "answer"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "target_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "request.raw_prompt",
+              "request.update_goal",
+              "assets.target_project.location",
+              "assets.base_model.checkpoint",
+              "assets.base_model.discovery_authorized",
+              "assets.new_data.location",
+              "assets.new_data.allowed_uses",
+              "requirements.capabilities_to_preserve",
+              "requirements.success_expectation"
+            ]
+          }
+        },
+        "question": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "status": {
+          "enum": [
+            "unanswered",
+            "answered"
+          ]
+        },
+        "answer": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "optionalQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "question",
+        "reason",
+        "status",
+        "answer"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "question": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "reason": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "status": {
+          "enum": [
+            "unanswered",
+            "answered",
+            "skipped"
+          ]
+        },
+        "answer": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "confirmed_task_input_version",
+        "notes"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "confirmed",
+            "rejected"
+          ]
+        },
+        "confirmed_task_input_version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "notes": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_questions",
+        "optional_questions",
+        "human_confirmation"
+      ],
+      "properties": {
+        "required_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/requiredQuestion"
+          }
+        },
+        "optional_questions": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/optionalQuestion"
+          }
+        },
+        "human_confirmation": {
+          "$ref": "#/$defs/confirmation"
+        }
+      }
+    }
+  }
+}

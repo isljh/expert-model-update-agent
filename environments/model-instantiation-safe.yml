@@ -1,0 +1,7 @@
+name: model-instantiation-safe
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pyyaml=6.0.3

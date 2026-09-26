@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model-creation-proposal.schema.json",
+  "title": "模型完整对象创建方案集合",
+  "description": "项目理解 Agent 提交给确定性静态验证工具的有序对象创建图；每个方案完整表达创建步骤、包装关系、运行时对象、目标模型和 checkpoint 加载目标。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["report_type", "schema_version", "task_binding", "asset_preflight_report", "project", "selected_proposal_id", "proposals"],
+  "properties": {
+    "report_type": {"const": "ModelCreationProposalSet"},
+    "schema_version": {"const": "0.2"},
+    "task_binding": {"$ref": "#/$defs/taskBinding"},
+    "asset_preflight_report": {"type": "object"},
+    "project": {"$ref": "#/$defs/project"},
+    "selected_proposal_id": {"type": ["string", "null"], "minLength": 1},
+    "proposals": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/proposal"}}
+  },
+  "$defs": {
+    "taskBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "task_input_version", "asset_input_digest"],
+      "properties": {
+        "task_id": {"type": "string", "minLength": 1},
+        "task_input_version": {"type": "integer", "minimum": 1},
+        "asset_input_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_project_path", "source_revision"],
+      "properties": {
+        "source_project_path": {"type": "string", "minLength": 1},
+        "source_revision": {"type": ["string", "null"], "pattern": "^[a-fA-F0-9]{40}$"}
+      }
+    },
+    "callableRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "module", "symbol"],
+      "properties": {
+        "origin": {"enum": ["project", "pytorch"]},
+        "module": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"},
+        "symbol": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+      }
+    },
+    "objectRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "path"],
+      "properties": {
+        "step_id": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "path": {"type": "string", "pattern": "^\\$(\\.[A-Za-z_][A-Za-z0-9_]*)*$"}
+      }
+    },
+    "argumentValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {"kind": {"const": "literal"}, "value": {}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "module", "symbol"],
+          "properties": {
+            "kind": {"const": "symbol"},
+            "module": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"},
+            "symbol": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "object"],
+          "properties": {"kind": {"const": "object_ref"}, "object": {"$ref": "#/$defs/objectRef"}}
+        }
+      ]
+    },
+    "positionalArgument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "source_expression"],
+      "properties": {
+        "value": {"$ref": "#/$defs/argumentValue"},
+        "source_expression": {"type": ["string", "null"]}
+      }
+    },
+    "keywordArgument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter", "value", "source_expression"],
+      "properties": {
+        "parameter": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "value": {"$ref": "#/$defs/argumentValue"},
+        "source_expression": {"type": ["string", "null"]}
+      }
+    },
+    "sourceAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "scope", "line", "call_expression"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "scope": {"type": ["string", "null"]},
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "call_expression": {"type": ["string", "null"]}
+      }
+    },
+    "constructionStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "callable", "positional_arguments", "keyword_arguments", "source_anchor", "evidence_refs"],
+      "properties": {
+        "step_id": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "callable": {"$ref": "#/$defs/callableRef"},
+        "positional_arguments": {"type": "array", "items": {"$ref": "#/$defs/positionalArgument"}},
+        "keyword_arguments": {"type": "array", "items": {"$ref": "#/$defs/keywordArgument"}},
+        "source_anchor": {"$ref": "#/$defs/sourceAnchor"},
+        "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "method", "positional_arguments", "keyword_arguments", "source_anchor"],
+      "properties": {
+        "target": {"$ref": "#/$defs/objectRef"},
+        "method": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "positional_arguments": {"type": "array", "items": {"$ref": "#/$defs/positionalArgument"}},
+        "keyword_arguments": {"type": "array", "items": {"$ref": "#/$defs/keywordArgument"}},
+        "source_anchor": {"$ref": "#/$defs/sourceAnchor"}
+      }
+    },
+    "keyTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "value"],
+      "properties": {
+        "operation": {"enum": ["strip_prefix", "add_prefix"]},
+        "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "checkpoint": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["path", "selector_path", "key_transforms", "load_target", "strict", "source_anchor"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "selector_path": {"type": ["string", "null"], "pattern": "^\\$(\\.[A-Za-z_][A-Za-z0-9_]*)*$"},
+        "key_transforms": {"type": "array", "items": {"$ref": "#/$defs/keyTransform"}},
+        "load_target": {"$ref": "#/$defs/objectRef"},
+        "strict": {"type": "boolean"},
+        "source_anchor": {"$ref": "#/$defs/sourceAnchor"}
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "construction_steps", "result", "pre_checkpoint_load_operations", "post_checkpoint_load_operations", "checkpoint", "evidence_refs"],
+      "properties": {
+        "proposal_id": {"type": "string", "minLength": 1},
+        "construction_steps": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/constructionStep"}},
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runtime_object", "target_model"],
+          "properties": {
+            "runtime_object": {"$ref": "#/$defs/objectRef"},
+            "target_model": {"$ref": "#/$defs/objectRef"}
+          }
+        },
+        "pre_checkpoint_load_operations": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
+        "post_checkpoint_load_operations": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
+        "checkpoint": {"$ref": "#/$defs/checkpoint"},
+        "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

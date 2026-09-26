@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asset-preflight-report.schema.json",
+  "title": "资产入口预检报告",
+  "description": "绑定 TaskInput 资产声明的只读存在性、类型与可读性检查结果。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_type",
+    "schema_version",
+    "task_id",
+    "task_input_version",
+    "asset_input_digest",
+    "base_directory",
+    "overall_status",
+    "checks"
+  ],
+  "properties": {
+    "report_type": {
+      "const": "AssetPreflightReport"
+    },
+    "schema_version": {
+      "const": "0.1"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_input_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "asset_input_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "base_directory": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overall_status": {
+      "enum": [
+        "passed",
+        "failed"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/assetCheck"
+      }
+    }
+  },
+  "$defs": {
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "assetCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "supplied_path",
+        "expected_kind",
+        "status",
+        "resolved_path",
+        "reason_code",
+        "message"
+      ],
+      "properties": {
+        "field": {
+          "enum": [
+            "assets.target_project.location",
+            "assets.base_model.checkpoint",
+            "assets.base_model.config",
+            "assets.new_data.location"
+          ]
+        },
+        "supplied_path": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "expected_kind": {
+          "enum": [
+            "directory",
+            "file",
+            "file_or_directory"
+          ]
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "skipped"
+          ]
+        },
+        "resolved_path": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

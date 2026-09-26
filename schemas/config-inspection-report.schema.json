@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "config-inspection-report.schema.json",
+  "title": "模型配置安全检查报告",
+  "description": "把人类在 TaskInput 中声明的模型配置文件作为数据安全解析后的结果。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_type",
+    "schema_version",
+    "status",
+    "source",
+    "values",
+    "error"
+  ],
+  "properties": {
+    "report_type": {"const": "ConfigInspectionReport"},
+    "schema_version": {"const": "0.1"},
+    "status": {"enum": ["inspected", "unavailable", "failed"]},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size_bytes", "sha256", "format"],
+      "properties": {
+        "path": {"type": "string"},
+        "size_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "format": {"type": ["string", "null"], "enum": ["json", "yaml", "toml", "ini", null]}
+      }
+    },
+    "values": {},
+    "error": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {"type": "string", "minLength": 1},
+            "message": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
+  }
+}

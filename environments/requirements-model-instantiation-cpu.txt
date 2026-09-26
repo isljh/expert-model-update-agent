@@ -1,0 +1,5 @@
+# CPU-only PyTorch runtime for validated model construction and weight loading.
+# Install in model-instantiation-safe, not in the legacy model-analysis environment.
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu
+torchvision==0.29.0+cpu
