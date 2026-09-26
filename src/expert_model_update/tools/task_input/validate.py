@@ -1,4 +1,4 @@
-"""Validate the minimal TaskInput v0.2 contract without third-party packages."""
+"""Validate the minimal TaskInput v0.3 contract without third-party packages."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCHEMA_VERSION = "0.2"
+SCHEMA_VERSION = "0.3"
 DOC_PATH = "docs/product-specs/task-intake.md"
 DATA_USES = {"analysis", "training", "validation", "evaluation"}
 GOAL_STATUSES = {"missing", "proposed", "confirmed"}
@@ -57,14 +57,14 @@ class Checker:
         allowed: Iterable[str],
     ) -> dict[str, Any] | None:
         if not isinstance(value, dict):
-            self.add("TYPE", path, "应为对象。", "按 TaskInput v0.2 结构提供键值对象。")
+            self.add("TYPE", path, "应为对象。", "按 TaskInput v0.3 结构提供键值对象。")
             return None
         required_set = set(required)
         allowed_set = set(allowed)
         for key in sorted(required_set - value.keys()):
             self.add("REQUIRED", f"{path}.{key}", "缺少必填字段。", "补充该字段；业务值未知时使用规范允许的 null、空数组或未确认状态。")
         for key in sorted(value.keys() - allowed_set):
-            self.add("UNKNOWN", f"{path}.{key}", "存在 v0.2 未定义的字段。", "删除该字段，或先修订契约再使用。")
+            self.add("UNKNOWN", f"{path}.{key}", "存在 v0.3 未定义的字段。", "删除该字段，或先修订契约再使用。")
         return value
 
     def string(self, value: Any, path: str, *, nullable: bool = False) -> None:
@@ -159,31 +159,20 @@ def validate_shape(data: Any) -> list[ValidationIssue]:
     assets = checker.object(
         root.get("assets"),
         "$.assets",
-        {"target_project", "base_model", "new_data"},
-        {"target_project", "base_model", "new_data"},
+        {"base_model", "new_data"},
+        {"base_model", "new_data"},
     )
     if assets is not None:
-        project = checker.object(
-            assets.get("target_project"),
-            "$.assets.target_project",
-            {"location"},
-            {"location"},
-        )
-        if project is not None:
-            checker.string(project.get("location"), "$.assets.target_project.location", nullable=True)
-
         model = checker.object(
             assets.get("base_model"),
             "$.assets.base_model",
-            {"checkpoint", "discovery_authorized"},
-            {"checkpoint", "config", "discovery_authorized"},
+            {"model_file", "config", "checkpoint"},
+            {"model_file", "config", "checkpoint"},
         )
         if model is not None:
-            checker.string(model.get("checkpoint"), "$.assets.base_model.checkpoint", nullable=True)
+            checker.string(model.get("model_file"), "$.assets.base_model.model_file", nullable=True)
             checker.string(model.get("config"), "$.assets.base_model.config", nullable=True)
-            discovery = model.get("discovery_authorized")
-            if discovery is not None and not isinstance(discovery, bool):
-                checker.add("TYPE", "$.assets.base_model.discovery_authorized", "应为布尔值或 null。", "使用 true、false；尚未回答时使用 null。")
+            checker.string(model.get("checkpoint"), "$.assets.base_model.checkpoint", nullable=True)
 
         new_data = checker.object(
             assets.get("new_data"),
@@ -331,19 +320,14 @@ def missing_requirements(data: dict[str, Any]) -> list[RequirementGap]:
     if not nonempty(goal_summary) or goal_status == "missing":
         gaps.append(RequirementGap(("request.update_goal",), "缺少可理解的更新目标。", "请用户说明希望模型获得或改善什么能力。"))
 
-    if not nonempty(value_at(data, "assets", "target_project", "location")):
-        gaps.append(RequirementGap(("assets.target_project.location",), "缺少目标项目位置。", "请用户提供目标项目的位置。"))
+    if not nonempty(value_at(data, "assets", "base_model", "model_file")):
+        gaps.append(RequirementGap(("assets.base_model.model_file",), "缺少原模型文件。", "请用户提供包含声明模型类的模型文件。"))
 
-    checkpoint = value_at(data, "assets", "base_model", "checkpoint")
-    discovery_authorized = value_at(data, "assets", "base_model", "discovery_authorized")
-    if not nonempty(checkpoint) and discovery_authorized is not True:
-        gaps.append(
-            RequirementGap(
-                ("assets.base_model.checkpoint", "assets.base_model.discovery_authorized"),
-                "既没有原模型 checkpoint，也未授权后续只读发现。",
-                "请用户提供 checkpoint，或明确授权后续阶段只读发现。",
-            )
-        )
+    if not nonempty(value_at(data, "assets", "base_model", "config")):
+        gaps.append(RequirementGap(("assets.base_model.config",), "缺少模型构造配置。", "请用户提供与模型类和权重对应的构造配置文件。"))
+
+    if not nonempty(value_at(data, "assets", "base_model", "checkpoint")):
+        gaps.append(RequirementGap(("assets.base_model.checkpoint",), "缺少原模型 checkpoint。", "请用户提供与声明模型结构匹配的 checkpoint 文件。"))
 
     if not nonempty(value_at(data, "assets", "new_data", "location")):
         gaps.append(RequirementGap(("assets.new_data.location",), "缺少新数据位置。", "请用户提供新数据的位置。"))
@@ -365,8 +349,9 @@ def missing_requirements(data: dict[str, Any]) -> list[RequirementGap]:
 REQUIRED_TARGET_GROUPS = {
     ("request.raw_prompt",),
     ("request.update_goal",),
-    ("assets.target_project.location",),
-    ("assets.base_model.checkpoint", "assets.base_model.discovery_authorized"),
+    ("assets.base_model.model_file",),
+    ("assets.base_model.config",),
+    ("assets.base_model.checkpoint",),
     ("assets.new_data.location",),
     ("assets.new_data.allowed_uses",),
     ("requirements.capabilities_to_preserve",),
@@ -489,7 +474,7 @@ def validate_confirmed(data: dict[str, Any]) -> list[ValidationIssue]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="校验 TaskInput v0.2 JSON 文件。")
+    parser = argparse.ArgumentParser(description="校验 TaskInput v0.3 JSON 文件。")
     parser.add_argument("input", nargs="?", type=Path, help="TaskInput JSON 文件路径")
     parser.add_argument(
         "--stdin",

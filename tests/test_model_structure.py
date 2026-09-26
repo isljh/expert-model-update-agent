@@ -37,12 +37,13 @@ class ModelStructureTests(unittest.TestCase):
             def forward(self, value):
                 raise AssertionError("forward must not run")
 
-        structure = analyze_model_structure(Model(), proposal_id="P1", checkpoint={"status": "not_provided"})
+        checkpoint = {"status": "loaded", "missing_keys": [], "unexpected_keys": []}
+        structure = analyze_model_structure(Model(), load_spec_id="a" * 64, checkpoint=checkpoint)
         report = {
-            "status": "completed", "proposal_id": "P1", "checkpoint": {"status": "not_provided"},
+            "status": "completed", "load_spec_id": "a" * 64, "checkpoint": checkpoint,
             "task_binding": {"task_id": "T1", "task_input_version": 1},
-            "project": {"source_project_path": "test-project", "source_revision": None},
-            "model": {"runtime_type": "Model", "target_type": "Model"},
+            "delivery": {"model_file": "model.py", "config": "config.json", "checkpoint": "weights.pt"},
+            "model": {"class_name": "Model"},
             "structure_analysis": structure,
         }
         tree = render_structure_tree(report)
@@ -63,7 +64,11 @@ class ModelStructureTests(unittest.TestCase):
             def forward(self, value):
                 raise AssertionError("forward must not run")
 
-        result = analyze_model_structure(DirectLinear(), proposal_id="P1", checkpoint={"status": "not_provided"})
+        result = analyze_model_structure(
+            DirectLinear(),
+            load_spec_id="a" * 64,
+            checkpoint={"status": "loaded", "missing_keys": [], "unexpected_keys": []},
+        )
         self.assertEqual(result["general"]["model_family"], "Linear")
         self.assertTrue(result["general"]["model_family_evidence"]["direct_affine_parameter_pattern"])
 
@@ -82,7 +87,11 @@ class ModelStructureTests(unittest.TestCase):
                 raise AssertionError("structure analysis must not run forward")
 
         model = SharedModel()
-        result = analyze_model_structure(model, proposal_id="P1", checkpoint={"status": "not_provided"})
+        result = analyze_model_structure(
+            model,
+            load_spec_id="a" * 64,
+            checkpoint={"status": "loaded", "missing_keys": [], "unexpected_keys": []},
+        )
         self.assertEqual(result["status"], "passed")
         self.assertEqual(result["parameter_summary"]["total_parameter_count"], 6)
         self.assertEqual(len(result["sharing_and_quantization"]["shared_module_groups"]), 1)

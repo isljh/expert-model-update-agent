@@ -233,7 +233,7 @@ def _family(named: list[tuple[str, Any]], nn: Any) -> tuple[str, dict[str, Any]]
     }
 
 
-def analyze_model_structure(model: Any, *, proposal_id: str, checkpoint: dict[str, Any]) -> dict[str, Any]:
+def analyze_model_structure(model: Any, *, load_spec_id: str, checkpoint: dict[str, Any]) -> dict[str, Any]:
     """Return structure facts for the live target model; never call forward()."""
     import torch
 
@@ -251,8 +251,8 @@ def analyze_model_structure(model: Any, *, proposal_id: str, checkpoint: dict[st
     missing_keys = checkpoint.get("missing_keys", [])
     unexpected_keys = checkpoint.get("unexpected_keys", [])
     return {
-        "report_type": "ModelStructureAnalysisReport", "schema_version": "0.1",
-        "status": "passed", "proposal_id": proposal_id,
+        "report_type": "ModelStructureAnalysisReport", "schema_version": "0.2",
+        "status": "passed", "load_spec_id": load_spec_id,
         "source_model_state": {
             "checkpoint_status": checkpoint["status"],
             "checkpoint_parameters_loaded": checkpoint_loaded,

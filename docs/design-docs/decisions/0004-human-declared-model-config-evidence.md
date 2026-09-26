@@ -2,7 +2,7 @@
 
 ## 状态
 
-**已接受，适用于模型项目理解第一版。**
+**已被 0005 取代。本文仅保留历史背景。**
 
 ## 背景
 
@@ -29,5 +29,5 @@
 ## 关联材料
 
 - [任务受理规格](../../product-specs/task-intake.md)
-- [模型项目理解 Skill](../../../skills/model-project-understanding/SKILL.md)
+- [取代本决定的声明式模型交付决定](0005-declared-model-delivery.md)
 - [模型配置检查报告 Schema](../../../schemas/config-inspection-report.schema.json)

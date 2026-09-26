@@ -1,5 +1,6 @@
-"""Deterministic validation for Agent-proposed model creation specifications."""
+"""Declared model delivery validation and loading."""
 
-from .validate import validate_model_creation_proposals
+from .instantiate import load_validated_model
+from .validate import validate_model_delivery
 
-__all__ = ["validate_model_creation_proposals"]
+__all__ = ["load_validated_model", "validate_model_delivery"]

@@ -6,7 +6,7 @@
 
 ## 背景
 
-`task-intake` Skill 已能把用户请求整理为 TaskInput v0.2，Python 校验器也能确定性检查结构、固定必答问题映射和人工确认门槛。但仅存在 `validate.py` 不会让 Pi 自动把它作为模型可调用工具；Harness 必须获得工具名称、参数 Schema、执行函数和返回格式。
+`task-intake` Skill 已能把用户请求整理为 TaskInput v0.3，Python 校验器也能确定性检查结构、固定必答问题映射和人工确认门槛。但仅存在 `validate.py` 不会让 Pi 自动把它作为模型可调用工具；Harness 必须获得工具名称、参数 Schema、执行函数和返回格式。
 
 本项目仍要求业务契约和核心校验逻辑不依赖 Pi，以便未来替换 Harness。当前校验器只在本地项目中使用，不需要独立部署，也没有多客户端共享需求。
 
@@ -40,7 +40,7 @@
 ```json
 {
   "valid": false,
-  "schema_version": "0.2",
+  "schema_version": "0.3",
   "mode": "draft",
   "task_id": null,
   "task_input_version": null,

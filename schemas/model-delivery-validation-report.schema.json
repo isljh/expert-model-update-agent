@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model-delivery-validation-report.schema.json",
+  "title": "模型交付验证报告",
+  "description": "对唯一声明的模型文件、构造配置和 checkpoint 进行静态绑定后形成的加载计划。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["report_type", "schema_version", "task_binding", "status", "findings", "validated_load_plan", "readiness"],
+  "properties": {
+    "report_type": {"const": "ModelDeliveryValidationReport"},
+    "schema_version": {"const": "0.1"},
+    "task_binding": {"type": ["object", "null"]},
+    "status": {"enum": ["validated", "failed", "execution_error"]},
+    "findings": {"type": "array", "items": {"type": "object"}},
+    "validated_load_plan": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["load_spec_id", "task_binding", "model", "config", "checkpoint"],
+          "properties": {
+            "load_spec_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "task_binding": {"type": "object"},
+            "model": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256", "class_name", "constructor_kwargs"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                "class_name": {"type": "string", "minLength": 1},
+                "constructor_kwargs": {"type": "object"}
+              }
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+              }
+            },
+            "checkpoint": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256", "selector_path", "key_transforms", "strict", "inspected_tensor_count"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                "selector_path": {"type": "string", "minLength": 1},
+                "key_transforms": {"type": "array"},
+                "strict": {"const": true},
+                "inspected_tensor_count": {"type": ["integer", "null"], "minimum": 1}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ready_for_model_load", "ready_for_structure_analysis", "blockers"],
+      "properties": {
+        "ready_for_model_load": {"type": "boolean"},
+        "ready_for_structure_analysis": {"type": "boolean"},
+        "blockers": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "execution_error": {"type": "boolean"},
+    "error": {"type": "object"}
+  }
+}

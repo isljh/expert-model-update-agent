@@ -1,25 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "model-structure-analysis-report.schema.json",
-  "title": "模型结构解析报告",
-  "description": "同一实例化 worker 对真实 torch.nn.Module 的注册结构进行只读检查；不执行 forward。",
+  "title": "模型结构与可训练性分析报告",
+  "description": "同一加载 worker 对已恢复权重的 torch.nn.Module 进行只读结构与参数检查；不执行 forward。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["report_type", "schema_version", "status", "proposal_id", "source_model_state", "general", "module_tree", "parameters", "parameter_summary", "buffers", "sharing_and_quantization", "forward_trace"],
+  "required": ["report_type", "schema_version", "status", "load_spec_id", "source_model_state", "general", "module_tree", "parameters", "parameter_summary", "buffers", "sharing_and_quantization", "forward_trace"],
   "properties": {
     "report_type": {"const": "ModelStructureAnalysisReport"},
-    "schema_version": {"const": "0.1"},
+    "schema_version": {"const": "0.2"},
     "status": {"const": "passed"},
-    "proposal_id": {"type": "string", "minLength": 1},
+    "load_spec_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "source_model_state": {
       "type": "object",
       "required": ["checkpoint_status", "checkpoint_parameters_loaded", "checkpoint_fully_matched", "missing_keys", "unexpected_keys"],
       "properties": {
-        "checkpoint_status": {"enum": ["loaded", "not_provided"]},
-        "checkpoint_parameters_loaded": {"type": "boolean"},
-        "checkpoint_fully_matched": {"type": "boolean"},
-        "missing_keys": {"type": "array", "items": {"type": "string"}},
-        "unexpected_keys": {"type": "array", "items": {"type": "string"}}
+        "checkpoint_status": {"const": "loaded"},
+        "checkpoint_parameters_loaded": {"const": true},
+        "checkpoint_fully_matched": {"const": true},
+        "missing_keys": {"type": "array", "maxItems": 0},
+        "unexpected_keys": {"type": "array", "maxItems": 0}
       }
     },
     "general": {
@@ -35,11 +35,14 @@
         "model_family_evidence": {"type": "object"}
       }
     },
-    "module_tree": {"type": "array", "items": {"type": "object", "required": ["module_path", "module_type", "child_module_paths", "structural_attributes"]}},
-    "parameters": {"type": "array", "items": {"type": "object", "required": ["parameter_path", "shape", "parameter_count", "requires_grad", "alias_paths"]}},
-    "parameter_summary": {"type": "object", "required": ["total_parameter_count", "trainable_parameter_count", "frozen_parameter_count", "unique_parameter_tensor_count"]},
-    "buffers": {"type": "array", "items": {"type": "object", "required": ["buffer_path", "shape", "dtype", "device", "persistent"]}},
-    "sharing_and_quantization": {"type": "object", "required": ["shared_module_groups", "shared_parameter_groups", "quantized_module_paths", "quantized_parameter_paths", "quantization_indicators_found"]},
+    "module_tree": {"type": "array", "items": {"type": "object"}},
+    "parameters": {"type": "array", "items": {"type": "object"}},
+    "parameter_summary": {
+      "type": "object",
+      "required": ["total_parameter_count", "trainable_parameter_count", "frozen_parameter_count", "unique_parameter_tensor_count"]
+    },
+    "buffers": {"type": "array", "items": {"type": "object"}},
+    "sharing_and_quantization": {"type": "object"},
     "forward_trace": {"type": "object", "required": ["status", "reason"], "properties": {"status": {"const": "not_run"}}}
   }
 }

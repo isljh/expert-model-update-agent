@@ -1,6 +1,6 @@
-"""Persist verified model-analysis results outside the target project.
+"""Persist verified model-analysis results outside the model delivery directory.
 
-Only the host calls this module. The worker that imports target-project code
+Only the host calls this module. The worker that imports delivered model code
 never receives the record directory or writes the formal report.
 """
 
@@ -28,20 +28,21 @@ def render_structure_tree(report: dict[str, Any]) -> str:
     """Render every registered module and parameter without running the model."""
     structure = report.get("structure_analysis")
     binding = report.get("task_binding") or {}
-    project = report.get("project") or {}
+    delivery = report.get("delivery") or {}
     checkpoint = report.get("checkpoint") or {}
     model = report.get("model") or {}
     lines = [
         "# 模型结构解析运行报告",
         "",
         f"- 任务：{_inline(binding.get('task_id'))}，TaskInput v{binding.get('task_input_version', '?')}",
-        f"- 方案：{_inline(report.get('proposal_id'))}",
-        f"- 目标项目：{_inline(project.get('source_project_path'))}",
-        f"- 源码版本：{_inline(project.get('source_revision'))}",
+        f"- 加载计划：{_inline(report.get('load_spec_id'))}",
+        f"- 模型文件：{_inline(delivery.get('model_file'))}",
+        f"- 构造配置：{_inline(delivery.get('config'))}",
+        f"- checkpoint：{_inline(delivery.get('checkpoint'))}",
         f"- 本次执行：{_inline(report.get('status'))}；checkpoint：{_inline(checkpoint.get('status'))}",
-        f"- 运行时对象：{_inline(model.get('runtime_type'))}；目标模型：{_inline(model.get('target_type'))}",
+        f"- 模型类：{_inline(model.get('class_name'))}；总参数：{_inline(model.get('parameter_count'))}；可训练参数：{_inline(model.get('trainable_parameter_count'))}",
         "",
-        "本报告由工具返回的结构化结果生成；不是完整前向计算图。工具未主动调用训练或评估入口；目标项目代码仍可能有副作用。",
+        "本报告由工具返回的结构化结果生成；不是完整前向计算图。工具未主动调用训练或评估入口；导入模型文件和调用构造函数仍可能有副作用。",
         "",
     ]
     if not isinstance(structure, dict) or structure.get("status") != "passed":
@@ -138,34 +139,34 @@ def render_structure_tree(report: dict[str, Any]) -> str:
 
 
 def save_model_analysis_record(
-    report: dict[str, Any], *, record_root: Path, target_project: Path
+    report: dict[str, Any], *, record_root: Path, model_delivery_root: Path
 ) -> dict[str, Any]:
-    """Create a new record without accepting paths from the proposal or worker."""
+    """Create a new record without accepting output paths from the load plan or worker."""
     root = record_root.resolve(strict=False)
-    target = target_project.resolve(strict=True)
+    target = model_delivery_root.resolve(strict=True)
     if root == target or target in root.parents:
-        raise RecordWriteError("RECORD_ROOT_IN_TARGET_PROJECT", "运行记录目录位于目标项目内，拒绝写入。")
-    project_name = target.name or "project-root"
-    project_dir = (root / project_name).resolve(strict=False)
-    if root not in project_dir.parents or project_dir == target or target in project_dir.parents:
-        raise RecordWriteError("RECORD_PROJECT_DIRECTORY_INVALID", "项目运行记录目录不在允许的智能体目录内，拒绝写入。")
+        raise RecordWriteError("RECORD_ROOT_IN_MODEL_DELIVERY", "运行记录目录位于模型交付目录内，拒绝写入。")
+    delivery_name = target.name or "model-delivery"
+    delivery_dir = (root / delivery_name).resolve(strict=False)
+    if root not in delivery_dir.parents or delivery_dir == target or target in delivery_dir.parents:
+        raise RecordWriteError("RECORD_DIRECTORY_INVALID", "模型运行记录目录不在允许的智能体目录内，拒绝写入。")
     try:
-        project_dir.mkdir(parents=True, exist_ok=True)
+        delivery_dir.mkdir(parents=True, exist_ok=True)
         recorded_at = datetime.now(timezone.utc)
         run_id = recorded_at.strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex
-        json_path = project_dir / f"{run_id}.model-instantiation-and-structure-report.json"
-        tree_path = project_dir / f"{run_id}.model-structure-tree.md"
+        json_path = delivery_dir / f"{run_id}.model-instantiation-and-structure-report.json"
+        tree_path = delivery_dir / f"{run_id}.model-structure-tree.md"
         record = {
             "run_id": run_id,
             "recorded_at_utc": recorded_at.isoformat(),
-            "project_name": project_name,
+            "delivery_name": delivery_name,
             "json_report_path": str(json_path),
             "structure_tree_path": str(tree_path),
         }
         saved_report = {**report, "record": record}
         tree = render_structure_tree(saved_report)
-        pending_tree = project_dir / f".{run_id}.model-structure-tree.md.pending"
-        pending_json = project_dir / f".{run_id}.model-instantiation-and-structure-report.json.pending"
+        pending_tree = delivery_dir / f".{run_id}.model-structure-tree.md.pending"
+        pending_json = delivery_dir / f".{run_id}.model-instantiation-and-structure-report.json.pending"
         with pending_tree.open("x", encoding="utf-8", newline="\n") as stream:
             stream.write(tree)
         pending_tree.rename(tree_path)

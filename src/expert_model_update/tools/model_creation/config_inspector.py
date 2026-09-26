@@ -1,6 +1,6 @@
-"""Safely parse a human-declared model configuration file as data.
+"""Safely parse a required, human-declared model construction config as data.
 
-The inspector never imports the target project and never executes configuration
+The inspector never imports the model file and never executes configuration
 code.  Executable Python configs and unsupported formats are rejected.
 """
 

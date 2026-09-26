@@ -1,45 +1,33 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "model-instantiation-report.schema.json",
-  "title": "模型安全实例化报告",
-  "description": "安全实例化工具的边界、创建步骤和实际 checkpoint 加载结果；blocked 不代表已经创建模型。",
+  "title": "模型加载与实例化报告",
+  "description": "声明模型类的创建、checkpoint 严格加载和可训练参数检查结果；blocked 不代表已经创建模型。",
   "type": "object",
   "additionalProperties": true,
-  "required": ["report_type", "schema_version", "status", "checkpoint", "model", "error"],
+  "required": ["report_type", "schema_version", "load_spec_id", "status", "checkpoint", "model", "error"],
   "properties": {
     "report_type": {"const": "ModelInstantiationReport"},
-    "schema_version": {"const": "0.1"},
-    "proposal_id": {"type": ["string", "null"]},
-    "runtime": {
-      "type": "object",
-      "required": ["python_executable", "python_version", "torch_version"],
-      "properties": {
-        "python_executable": {"type": "string"},
-        "python_version": {"type": "string"},
-        "torch_version": {"type": ["string", "null"]}
-      }
-    },
+    "schema_version": {"const": "0.2"},
+    "load_spec_id": {"type": ["string", "null"]},
+    "runtime": {"type": "object"},
     "status": {"enum": ["completed", "failed", "blocked"]},
     "steps": {"type": "array"},
     "checkpoint": {
       "type": "object",
       "required": ["status"],
-      "properties": {"status": {"enum": ["loaded", "failed", "not_provided", "not_attempted"]}}
+      "properties": {
+        "status": {"enum": ["loaded", "failed", "not_attempted"]},
+        "strict": {"type": "boolean"},
+        "fully_matched": {"type": "boolean"},
+        "missing_keys": {"type": "array"},
+        "unexpected_keys": {"type": "array"}
+      }
     },
     "model": {"type": ["object", "null"]},
     "task_binding": {"type": "object"},
-    "project": {"type": "object"},
-    "record": {
-      "type": "object",
-      "required": ["run_id", "recorded_at_utc", "project_name", "json_report_path", "structure_tree_path"],
-      "properties": {
-        "run_id": {"type": "string"},
-        "recorded_at_utc": {"type": "string", "format": "date-time"},
-        "project_name": {"type": "string"},
-        "json_report_path": {"type": "string"},
-        "structure_tree_path": {"type": "string"}
-      }
-    },
+    "delivery": {"type": "object"},
+    "record": {"type": "object"},
     "structure_analysis": {
       "oneOf": [
         {"type": "null"},

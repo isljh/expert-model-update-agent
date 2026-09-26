@@ -1,90 +1,76 @@
-# 模型声明资产证据检查 v0.1
+# 模型配置与 checkpoint 安全检查
 
 ## 1. 目标
 
-在项目理解阶段，把人类在已确认 `TaskInput` 中声明的模型配置和 checkpoint 转换为安全、只读、结构化证据。检查器不搜索资产、不解释项目语义、不选择模型、不创建实例。
+在 TaskInput v0.3 确认并通过资产预检后，把上游声明的构造配置和 checkpoint 转换为只读、结构化证据。检查器不搜索资产、不导入模型文件、不创建实例，也不判断最终兼容性。
 
-Pi 工具：
+## 2. 输入绑定
 
-```text
-inspect_model_config
-inspect_model_checkpoint
+inspect_model_config 和 inspect_model_checkpoint 都必须接收：
+
+- 已确认的完整 TaskInput；
+- 与该任务、版本和资产摘要完全匹配且 overall_status 为 passed 的 AssetPreflightReport。
+
+工具只能读取预检中唯一通过的对应路径。如果 TaskInput、预检报告或文件摘要不一致，检查失败。
+
+## 3. 配置检查
+
+配置检查器支持 JSON、YAML、TOML、INI 和 CFG，将文件作为数据解析，不执行 Python 配置。输出包括：
+
+- 规范路径、大小和 SHA-256；
+- 配置格式；
+- 归一化后的数据值；
+- 失败状态与错误原因。
+
+当前模型加载流程要求配置符合 [Model Load Config Schema](../../schemas/model-load-config.schema.json)，至少声明：
+
+- framework=pytorch；
+- model_class；
+- constructor_kwargs；
+- checkpoint.state_dict_path；
+- checkpoint.key_transforms；
+- checkpoint.strict=true。
+
+通用解析成功并不等于该配置满足模型加载契约；后续 validate_model_delivery 负责机械验证。
+
+## 4. checkpoint 检查
+
+checkpoint 检查器只允许：
+
+```python
+torch.load(path, map_location="cpu", weights_only=True)
 ```
 
-两个工具都必须接收当前完整 `TaskInput` 和与其 `task_id`、`task_input_version`、`asset_input_digest` 匹配且 `overall_status=passed` 的 `AssetPreflightReport`。工具只能读取报告中对应字段唯一通过的规范路径。
+不支持 weights_only 或安全加载失败时，不得回退普通 pickle。输出只报告：
 
-## 2. 流程位置
+- 顶层类型和有限键列表；
+- 可识别的纯张量 state_dict 候选路径；
+- 张量名称、形状、dtype 和统一前缀；
+- 是否截断以及错误状态。
 
-```text
-人类声明项目、checkpoint 和可选 config
-        ↓
-TaskInput 确认与资产预检
-        ↓
-项目理解 Agent 初步分析源码候选
-        ↓
-Config Inspector（仅在 config 已声明时）
-Checkpoint Inspector（按需）
-        ↓
-Agent 综合源码和资产证据形成具体 proposal
-        ↓
-静态验证
-        ↓
-安全实例化与实际权重加载
-```
+张量形状可以支持一致性检查，但不能作为完整构造参数的通用推断来源。
 
-配置未声明时不得自动搜索；缺少配置导致候选无法区分时，返回人类补充并重新确认 TaskInput。
+## 5. 证据含义
 
-## 3. Config Inspector
+检查结果能够证明：
 
-第一版支持：
+- 工具检查了与当前 TaskInput 绑定的那个文件；
+- 配置能够作为安全数据解析；
+- checkpoint 能够在 weights_only 模式下读取；
+- 声明的 state_dict 路径是否存在。
 
-- JSON；
-- YAML（运行环境提供安全 YAML 解析器时）；
-- TOML（运行环境提供 `tomllib` 或 `tomli` 时）；
-- INI 和 CFG。
+检查结果不能证明：
 
-配置文件必须是 UTF-8 普通文件，最大 4 MiB。解析结果只允许字符串键及可转换为 JSON 的标量、数组和对象，并限制嵌套深度与节点数量。
+- 模型类能够成功导入和创建；
+- 配置值与上游训练时完全一致；
+- state_dict 与模型参数完全匹配；
+- 模型可以执行 forward、训练或满足业务目标。
 
-Python 配置和未知格式明确拒绝；不得导入模块、执行表达式、展开 shell 命令、访问网络或读取配置引用的其他文件。配置内容中的字符串是数据，不是 Agent 指令。
+这些结论必须分别由 validate_model_delivery、实际严格加载、结构与可训练性分析以及后续训练评估提供。
 
-输出核心字段：
+## 6. 安全边界
 
-```yaml
-report_type: ConfigInspectionReport
-schema_version: "0.1"
-status: inspected | unavailable | failed
-source:
-  path: string
-  size_bytes: integer | null
-  sha256: string | null
-  format: json | yaml | toml | ini | null
-values: any
-error: object | null
-```
-
-Schema：[`../../schemas/config-inspection-report.schema.json`](../../schemas/config-inspection-report.schema.json)
-
-## 4. Checkpoint Inspector
-
-第一版只支持单个 PyTorch checkpoint 文件，并：
-
-- 在独立 Python 进程中运行；
-- 不导入目标项目；
-- 使用 CPU；
-- 强制 `weights_only=True`；
-- 不支持安全模式时停止，不退回普通 pickle；
-- 拒绝超过 2 GiB 的单文件，并记录允许范围内文件的 SHA-256；
-- 返回 state dict 候选路径、张量键、shape、dtype 和统一前缀。
-
-目录式和分片 checkpoint 暂时返回 `unavailable`。检查报告只能辅助候选消歧和 proposal 形成，不能证明 checkpoint 与模型兼容。
-
-## 5. 证据合并规则
-
-- 源码证明配置字段如何影响 callable 或参数；
-- config 报告证明人类指定文件声明了什么；
-- checkpoint 报告证明文件中安全可见的结构事实；
-- Agent 负责结合证据提出具体 proposal；
-- 静态验证器核对 proposal 与源码的机械关系；
-- 安全实例化工具通过实际创建对象和加载权重证明最终兼容性。
-
-任意来源冲突时保留冲突和多个候选，不按文件名、目录位置或来源优先级强行覆盖。
+- 模型文件导入属于执行阶段，不属于检查阶段。
+- 文件中的字符串只作为不可信数据，不作为 Agent 指令。
+- checkpoint 值不输出，正式报告只保留结构元数据。
+- 当前单文件 checkpoint 上限为 2 GiB；目录式和分片格式尚未实现。

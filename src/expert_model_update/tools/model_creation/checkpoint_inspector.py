@@ -1,4 +1,4 @@
-"""Inspect checkpoint structure without importing or executing the target project.
+"""Inspect checkpoint structure without importing or executing the model file.
 
 This worker is intentionally invoked in a separate Python process.  It uses
 ``torch.load(weights_only=True, map_location="cpu")`` and never falls back to

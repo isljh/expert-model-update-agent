@@ -297,7 +297,7 @@ const validateTaskInputTool = defineTool({
 	name: "validate_task_input",
 	label: "Validate TaskInput",
 	description:
-		"确定性校验 TaskInput v0.2 的结构、固定必答问题映射和人工确认门槛，不读取项目、模型或数据。",
+		"确定性校验 TaskInput v0.3 的结构、固定必答问题映射和人工确认门槛，不读取模型、权重、配置或数据。",
 	promptSnippet: "Validate a TaskInput draft or confirmation gate deterministically",
 	promptGuidelines: [
 		"Use validate_task_input in draft mode after creating or changing a TaskInput draft.",
@@ -339,12 +339,12 @@ const preflightTaskAssetsTool = defineTool({
 	name: "preflight_task_assets",
 	label: "Preflight Task Assets",
 	description:
-		"只读检查 TaskInput 声明的目标项目、checkpoint、可选模型配置文件和新数据路径是否存在、类型正确且当前可读；不扫描内容、不加载权重、不解析配置、不分析项目。",
+		"只读检查 TaskInput 声明的模型文件、构造配置、checkpoint 和新数据路径是否存在、类型正确且当前可读；不扫描内容、不导入模型、不加载权重、不解析配置。",
 	promptSnippet: "Preflight declared TaskInput asset paths before human confirmation",
 	promptGuidelines: [
 		"Use preflight_task_assets after draft validation passes and all required questions have been answered and synchronized to their formal fields.",
 		"Do not ask for final human confirmation while the asset preflight result is failed.",
-		"Run it again immediately before entering project understanding, and require the result to match the current task_id, task_input_version, and asset declarations.",
+		"Run it again immediately before model delivery inspection, and require the result to match the current task_id, task_input_version, and asset declarations.",
 		"Do not replace this tool with shell commands or infer that a path is available from its text.",
 	],
 	parameters: Type.Object(

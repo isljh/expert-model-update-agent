@@ -257,73 +257,35 @@ def preflight_task_assets(
     task_id, version, assets = _task_identity(task_input)
     base = (base_directory or Path.cwd()).resolve(strict=True)
 
-    target_project = _nested_object(assets, "target_project")
     base_model = _nested_object(assets, "base_model")
     new_data = _nested_object(assets, "new_data")
 
     checks = [
         check_path(
-            "assets.target_project.location",
-            target_project.get("location"),
-            "directory",
+            "assets.base_model.model_file",
+            base_model.get("model_file"),
+            "file",
             base,
-        )
-    ]
-
-    checkpoint = _nonempty_string(base_model.get("checkpoint"))
-    if checkpoint is None and base_model.get("discovery_authorized") is True:
-        checks.append(
-            AssetCheck(
-                field="assets.base_model.checkpoint",
-                supplied_path=None,
-                expected_kind="file_or_directory",
-                status="skipped",
-                resolved_path=None,
-                reason_code="discovery_authorized",
-                message="未提供 checkpoint；已授权后续阶段只读发现。",
-            )
-        )
-    else:
-        checks.append(
-            check_path(
-                "assets.base_model.checkpoint",
-                checkpoint,
-                "file_or_directory",
-                base,
-            )
-        )
-
-    config = _nonempty_string(base_model.get("config"))
-    if config is None:
-        checks.append(
-            AssetCheck(
-                field="assets.base_model.config",
-                supplied_path=None,
-                expected_kind="file",
-                status="skipped",
-                resolved_path=None,
-                reason_code="optional_not_supplied",
-                message="未提供可选模型配置文件；后续阶段不得自动搜索替代文件。",
-            )
-        )
-    else:
-        checks.append(
-            check_path(
-                "assets.base_model.config",
-                config,
-                "file",
-                base,
-            )
-        )
-
-    checks.append(
+        ),
+        check_path(
+            "assets.base_model.config",
+            base_model.get("config"),
+            "file",
+            base,
+        ),
+        check_path(
+            "assets.base_model.checkpoint",
+            base_model.get("checkpoint"),
+            "file",
+            base,
+        ),
         check_path(
             "assets.new_data.location",
             new_data.get("location"),
             "file_or_directory",
             base,
-        )
-    )
+        ),
+    ]
 
     overall_status = (
         "failed" if any(check.status == "failed" for check in checks) else "passed"

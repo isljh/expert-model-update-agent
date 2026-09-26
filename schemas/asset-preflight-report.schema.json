@@ -75,7 +75,7 @@
       "properties": {
         "field": {
           "enum": [
-            "assets.target_project.location",
+            "assets.base_model.model_file",
             "assets.base_model.checkpoint",
             "assets.base_model.config",
             "assets.new_data.location"

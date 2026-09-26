@@ -1,8 +1,4 @@
-"""Revalidate a construction plan, then execute it in a local Python process.
-
-This subprocess is not an OS sandbox. Project imports and constructors can have
-side effects; the host only bounds runtime and captured output.
-"""
+"""Revalidate and load a declared model delivery in a local Python process."""
 
 from __future__ import annotations
 
@@ -17,15 +13,15 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .validate import validate_model_creation_proposals
+    from .validate import validate_model_delivery
     from .record import RecordWriteError, save_model_analysis_record
-except ImportError:  # direct CLI entry
-    from validate import validate_model_creation_proposals
+except ImportError:
+    from validate import validate_model_delivery
     from record import RecordWriteError, save_model_analysis_record
 
 
 REPORT_TYPE = "ModelInstantiationReport"
-REPORT_VERSION = "0.1"
+REPORT_VERSION = "0.2"
 MAX_WORKER_OUTPUT_BYTES = 4 * 1024 * 1024
 MAX_PLAN_BYTES = 4 * 1024 * 1024
 WORKER_TIMEOUT_SECONDS = 120
@@ -33,58 +29,55 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_RECORD_ROOT = PROJECT_ROOT / "run-records" / "model-structure"
 
 
-def _blocked(code: str, message: str, *, proposal_id: str | None = None) -> dict[str, Any]:
+def _blocked(code: str, message: str, *, load_spec_id: str | None = None) -> dict[str, Any]:
     return {
         "report_type": REPORT_TYPE,
         "schema_version": REPORT_VERSION,
-        "proposal_id": proposal_id,
+        "load_spec_id": load_spec_id,
         "status": "blocked",
         "steps": [],
         "checkpoint": {"status": "not_attempted"},
         "model": None,
+        "structure_analysis": None,
         "error": {"code": code, "message": message},
     }
 
 
 def _prepare_plan(payload: Any, base_directory: Path) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    if not isinstance(payload, dict) or set(payload) != {"proposal_set", "validation_report"}:
-        return None, _blocked("INPUT_CONTRACT_INVALID", "必须提供 proposal_set 与其对应的 validation_report。")
-    supplied_report = payload["validation_report"]
-    if not isinstance(supplied_report, dict):
-        return None, _blocked("VALIDATION_REPORT_INVALID", "validation_report 必须是 JSON 对象。")
+    if not isinstance(payload, dict) or set(payload) != {"delivery_inputs", "validation_report"}:
+        return None, _blocked("INPUT_CONTRACT_INVALID", "必须提供 delivery_inputs 与对应 validation_report。")
+    supplied = payload["validation_report"]
+    if not isinstance(supplied, dict):
+        return None, _blocked("VALIDATION_REPORT_INVALID", "validation_report 必须是对象。")
     try:
-        current = validate_model_creation_proposals(payload["proposal_set"], base_directory=base_directory)
+        current = validate_model_delivery(payload["delivery_inputs"], base_directory=base_directory)
     except (OSError, RuntimeError, ValueError) as exc:
-        return None, _blocked("REVALIDATION_FAILED", f"重新核验创建方案失败：{type(exc).__name__}: {exc}")
-    readiness = current["readiness"]
-    if not readiness["ready_for_model_construction"]:
-        return None, _blocked("MODEL_CONSTRUCTION_NOT_READY", "当前方案不满足模型创建条件。")
-    selected = current["selection"].get("selected_proposal_id")
-    if not isinstance(selected, str):
-        return None, _blocked("PROPOSAL_NOT_SELECTED", "没有唯一且已验证的创建方案。")
-    selected_result = next(item for item in current["proposal_results"] if item["proposal_id"] == selected)
-    if selected_result["checkpoint_recipe_status"] not in {"validated", "not_provided"}:
-        return None, _blocked("CHECKPOINT_RECIPE_NOT_READY", "checkpoint 加载指令未通过静态核验。", proposal_id=selected)
-    if selected_result["checkpoint_recipe_status"] == "validated" and not readiness["ready_for_checkpoint_load_attempt"]:
-        return None, _blocked("CHECKPOINT_ATTEMPT_NOT_READY", "checkpoint 加载尝试尚未就绪。", proposal_id=selected)
-    plan = current["validated_instantiation_plan"]
+        return None, _blocked("REVALIDATION_FAILED", f"重新核验模型交付物失败：{type(exc).__name__}: {exc}")
+    if not current["readiness"]["ready_for_model_load"]:
+        return None, _blocked("MODEL_LOAD_NOT_READY", "当前模型交付物不满足加载条件。")
+    plan = current["validated_load_plan"]
+    assert isinstance(plan, dict)
     if (
-        supplied_report.get("report_type") != "ModelCreationValidationReport"
-        or supplied_report.get("schema_version") != "0.2"
-        or supplied_report.get("task_binding") != current.get("task_binding")
-        or supplied_report.get("selection") != current.get("selection")
-        or supplied_report.get("validated_instantiation_plan") != plan
-        or supplied_report.get("readiness") != readiness
+        supplied.get("report_type") != "ModelDeliveryValidationReport"
+        or supplied.get("schema_version") != "0.1"
+        or supplied.get("task_binding") != current.get("task_binding")
+        or supplied.get("status") != current.get("status")
+        or supplied.get("validated_load_plan") != plan
+        or supplied.get("readiness") != current.get("readiness")
     ):
-        return None, _blocked("VALIDATION_REPORT_MISMATCH", "传入的静态验证报告与当前重新核验结果不一致。", proposal_id=selected)
+        return None, _blocked("VALIDATION_REPORT_MISMATCH", "传入的验证报告与当前重新核验结果不一致。", load_spec_id=plan["load_spec_id"])
     return plan, None
 
 
 def _run_bounded(argv: list[str], plan_bytes: bytes, *, cwd: str, env: dict[str, str]) -> tuple[int, bytes, bool]:
-    """Limit captured worker output while the worker is executing."""
     process = subprocess.Popen(
-        argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        cwd=cwd, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        argv,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=cwd,
+        env=env,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert process.stdin is not None and process.stdout is not None and process.stderr is not None
     output = bytearray()
@@ -116,12 +109,12 @@ def _run_bounded(argv: list[str], plan_bytes: bytes, *, cwd: str, env: dict[str,
         except OSError:
             pass
 
-    readers = [
+    threads = [
         threading.Thread(target=read_stream, args=(process.stdout,), kwargs={"keep": True}, daemon=True),
         threading.Thread(target=read_stream, args=(process.stderr,), kwargs={"keep": False}, daemon=True),
         threading.Thread(target=write_input, daemon=True),
     ]
-    for thread in readers:
+    for thread in threads:
         thread.start()
     try:
         returncode = process.wait(timeout=WORKER_TIMEOUT_SECONDS)
@@ -130,7 +123,7 @@ def _run_bounded(argv: list[str], plan_bytes: bytes, *, cwd: str, env: dict[str,
         process.wait()
         raise
     finally:
-        for thread in readers:
+        for thread in threads:
             thread.join(timeout=2)
         for stream in (process.stdin, process.stdout, process.stderr):
             try:
@@ -143,38 +136,48 @@ def _run_bounded(argv: list[str], plan_bytes: bytes, *, cwd: str, env: dict[str,
 def _valid_worker_report(report: Any, plan: dict[str, Any], *, analyze_structure: bool = False) -> bool:
     if not isinstance(report, dict) or report.get("report_type") != REPORT_TYPE or report.get("schema_version") != REPORT_VERSION:
         return False
-    if report.get("proposal_id") != plan["proposal_id"] or report.get("status") not in {"completed", "failed"}:
-        return False
-    if not isinstance(report.get("steps"), list):
+    if report.get("load_spec_id") != plan["load_spec_id"] or report.get("status") not in {"completed", "failed"}:
         return False
     checkpoint = report.get("checkpoint")
-    if not isinstance(checkpoint, dict) or checkpoint.get("status") not in {"loaded", "failed", "not_provided", "not_attempted"}:
+    if not isinstance(report.get("steps"), list) or not isinstance(checkpoint, dict):
+        return False
+    if checkpoint.get("status") not in {"loaded", "failed", "not_attempted"}:
         return False
     if report["status"] == "completed":
         model = report.get("model")
-        expected_checkpoint = "loaded" if plan.get("checkpoint_load_attempt") else "not_provided"
         structure = report.get("structure_analysis")
         return (
             isinstance(model, dict)
             and model.get("target_is_torch_module") is True
+            and isinstance(model.get("has_trainable_parameters"), bool)
             and report.get("error") is None
-            and checkpoint["status"] == expected_checkpoint
-            and (expected_checkpoint != "loaded" or checkpoint.get("weights_only") is True)
-            and (not analyze_structure or (
-                isinstance(structure, dict)
-                and structure.get("report_type") == "ModelStructureAnalysisReport"
-                and structure.get("schema_version") == "0.1"
-                and structure.get("status") == "passed"
-                and structure.get("proposal_id") == plan["proposal_id"]
-                and structure.get("source_model_state", {}).get("checkpoint_status") == checkpoint["status"]
-            ))
+            and checkpoint.get("status") == "loaded"
+            and checkpoint.get("weights_only") is True
+            and checkpoint.get("strict") is True
+            and checkpoint.get("fully_matched") is True
+            and checkpoint.get("missing_keys") == []
+            and checkpoint.get("unexpected_keys") == []
+            and (
+                not analyze_structure
+                or (
+                    isinstance(structure, dict)
+                    and structure.get("report_type") == "ModelStructureAnalysisReport"
+                    and structure.get("schema_version") == "0.2"
+                    and structure.get("status") == "passed"
+                    and structure.get("load_spec_id") == plan["load_spec_id"]
+                    and structure.get("source_model_state", {}).get("checkpoint_fully_matched") is True
+                )
+            )
         )
     error = report.get("error")
     return isinstance(error, dict) and isinstance(error.get("code"), str) and isinstance(error.get("message"), str)
 
 
-def instantiate_validated_model(
-    payload: Any, *, base_directory: Path | None = None, analyze_structure: bool = False,
+def load_validated_model(
+    payload: Any,
+    *,
+    base_directory: Path | None = None,
+    analyze_structure: bool = False,
     record_root: Path | None = None,
 ) -> dict[str, Any]:
     base = (base_directory or Path.cwd()).resolve(strict=True)
@@ -182,22 +185,23 @@ def instantiate_validated_model(
     if error is not None:
         return error
     assert plan is not None
+    delivery_root = Path(plan["model"]["path"]).resolve(strict=True).parent
     destination = record_root if record_root is not None else DEFAULT_RECORD_ROOT
     if analyze_structure:
         resolved_destination = destination.resolve(strict=False)
-        target = Path(plan["project"]["source_project_path"]).resolve(strict=True)
-        if resolved_destination == target or target in resolved_destination.parents:
-            return _blocked("RECORD_ROOT_IN_TARGET_PROJECT", "运行记录目录位于目标项目内，拒绝执行。", proposal_id=plan["proposal_id"])
+        if resolved_destination == delivery_root or delivery_root in resolved_destination.parents:
+            return _blocked("RECORD_ROOT_IN_MODEL_DELIVERY", "运行记录目录位于模型交付目录内，拒绝执行。", load_spec_id=plan["load_spec_id"])
         if record_root is None:
             workspace = PROJECT_ROOT.resolve(strict=True)
             if workspace not in resolved_destination.parents:
-                return _blocked("RECORD_ROOT_OUTSIDE_WORKSPACE", "运行记录目录未解析到智能体项目内，拒绝执行。", proposal_id=plan["proposal_id"])
+                return _blocked("RECORD_ROOT_OUTSIDE_WORKSPACE", "运行记录目录未解析到智能体项目内，拒绝执行。", load_spec_id=plan["load_spec_id"])
     worker = Path(__file__).with_name("instantiate_worker.py").resolve(strict=True)
     argv = [sys.executable, "-B", "-X", "utf8", str(worker)]
     if analyze_structure:
         argv.append("--analyze-structure")
     environment = {
-        key: value for key, value in os.environ.items()
+        key: value
+        for key, value in os.environ.items()
         if key in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA"}
     }
     environment.update({
@@ -209,42 +213,44 @@ def instantiate_validated_model(
     })
     plan_bytes = json.dumps(plan, ensure_ascii=False).encode("utf-8")
     if len(plan_bytes) > MAX_PLAN_BYTES:
-        return _blocked("PLAN_TOO_LARGE", "实例化计划超过 4 MiB。", proposal_id=plan["proposal_id"])
+        return _blocked("PLAN_TOO_LARGE", "模型加载计划超过 4 MiB。", load_spec_id=plan["load_spec_id"])
     try:
-        with tempfile.TemporaryDirectory(prefix="model-instantiation-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="model-loading-") as scratch:
             returncode, output, overflow = _run_bounded(argv, plan_bytes, cwd=scratch, env=environment)
     except subprocess.TimeoutExpired:
-        return _blocked("WORKER_EXECUTION_TIMEOUT", "本地模型创建超过 120 秒；子进程已终止。", proposal_id=plan["proposal_id"])
+        return _blocked("WORKER_EXECUTION_TIMEOUT", "本地模型加载超过 120 秒；子进程已终止。", load_spec_id=plan["load_spec_id"])
     except OSError as exc:
-        return _blocked("WORKER_START_FAILED", f"无法启动本地模型创建进程：{exc}", proposal_id=plan["proposal_id"])
+        return _blocked("WORKER_START_FAILED", f"无法启动本地模型加载进程：{exc}", load_spec_id=plan["load_spec_id"])
     if overflow:
-        return _blocked("WORKER_OUTPUT_TOO_LARGE", "模型创建进程输出超过 4 MiB。", proposal_id=plan["proposal_id"])
+        return _blocked("WORKER_OUTPUT_TOO_LARGE", "模型加载进程输出超过 4 MiB。", load_spec_id=plan["load_spec_id"])
     try:
         report = json.loads(output.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return _blocked("WORKER_OUTPUT_INVALID", "模型创建进程没有返回有效 JSON。", proposal_id=plan["proposal_id"])
+        return _blocked("WORKER_OUTPUT_INVALID", "模型加载进程没有返回有效 JSON。", load_spec_id=plan["load_spec_id"])
     if not _valid_worker_report(report, plan, analyze_structure=analyze_structure):
-        return _blocked("WORKER_OUTPUT_INVALID", "模型创建进程返回的报告不符合协议。", proposal_id=plan["proposal_id"])
+        return _blocked("WORKER_OUTPUT_INVALID", "模型加载进程返回的报告不符合协议。", load_spec_id=plan["load_spec_id"])
     if (returncode == 0) != (report["status"] == "completed"):
-        return _blocked("WORKER_EXIT_STATUS_MISMATCH", "模型创建进程退出码与报告状态不一致。", proposal_id=plan["proposal_id"])
+        return _blocked("WORKER_EXIT_STATUS_MISMATCH", "模型加载进程退出码与报告状态不一致。", load_spec_id=plan["load_spec_id"])
     report["execution_boundary"] = {
         "kind": "local_subprocess_without_os_isolation",
-        "project_imported_in_host": False,
-        "project_code_may_have_executed_in_worker": True,
-        "project_filesystem_read_only_guaranteed": False,
+        "model_code_imported_in_host": False,
+        "model_code_may_have_executed_in_worker": True,
+        "model_assets_read_only_guaranteed": False,
         "network_blocked_guaranteed": False,
         "child_process_cleanup_guaranteed": False,
     }
     if analyze_structure:
         report["task_binding"] = payload["validation_report"]["task_binding"]
-        report["project"] = {
-            "source_project_path": plan["project"]["source_project_path"],
-            "source_revision": plan["project"]["source_revision"],
+        report["delivery"] = {
+            "model_file": plan["model"]["path"],
+            "config": plan["config"]["path"],
+            "checkpoint": plan["checkpoint"]["path"],
         }
         try:
             return save_model_analysis_record(
-                report, record_root=destination,
-                target_project=Path(plan["project"]["source_project_path"]),
+                report,
+                record_root=destination,
+                model_delivery_root=delivery_root,
             )
         except Exception as exc:
             report["status"] = "failed"
@@ -260,14 +266,13 @@ def main() -> int:
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="在本地子进程执行已验证的模型创建方案；不提供操作系统级隔离。")
+    parser = argparse.ArgumentParser(description="在本地子进程加载已验证模型交付物；不提供操作系统级隔离。")
     parser.add_argument("--stdin", action="store_true", required=True)
     parser.add_argument("--analyze-structure", action="store_true")
     args = parser.parse_args()
-    assert args.stdin
     try:
         payload = json.load(sys.stdin)
-        report = instantiate_validated_model(payload, analyze_structure=args.analyze_structure)
+        report = load_validated_model(payload, analyze_structure=args.analyze_structure)
     except Exception as exc:
         report = _blocked("HOST_EXECUTION_FAILED", f"{type(exc).__name__}: {exc}")
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))

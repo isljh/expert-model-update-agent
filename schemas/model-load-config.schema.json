@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model-load-config.schema.json",
+  "title": "上游模型加载配置",
+  "description": "与单个 PyTorch 模型文件和 checkpoint 配套的声明式构造与权重加载配置。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "framework", "model_class", "constructor_kwargs", "checkpoint"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "framework": {"const": "pytorch"},
+    "model_class": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "constructor_kwargs": {
+      "type": "object",
+      "description": "传给模型类构造函数的 JSON 安全关键字参数。"
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_dict_path", "key_transforms", "strict"],
+      "properties": {
+        "state_dict_path": {
+          "type": "string",
+          "pattern": "^\\$(\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+        },
+        "key_transforms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation", "value"],
+            "properties": {
+              "operation": {"enum": ["strip_prefix", "add_prefix"]},
+              "value": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "strict": {
+          "const": true,
+          "description": "v0.1 要求严格加载；missing 或 unexpected keys 均阻止通过。"
+        }
+      }
+    }
+  }
+}
