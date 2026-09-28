@@ -301,7 +301,7 @@ const validateTaskInputTool = defineTool({
 	promptSnippet: "Validate a TaskInput draft or confirmation gate deterministically",
 	promptGuidelines: [
 		"Use validate_task_input in draft mode after creating or changing a TaskInput draft.",
-		"Use validate_task_input in confirmed mode before declaring that a TaskInput can enter strategy planning.",
+		"Use validate_task_input in confirmed mode before handing the task to model delivery inspection.",
 		"Do not infer that validation passed when validate_task_input is unavailable or returns an execution error.",
 	],
 	parameters: Type.Object(
@@ -311,7 +311,7 @@ const validateTaskInputTool = defineTool({
 			}),
 			mode: StringEnum(["draft", "confirmed"] as const, {
 				description:
-					"draft 检查草案结构与问题映射；confirmed 额外检查进入策略规划的确认门槛。",
+					"draft 检查草案结构与问题映射；confirmed 额外检查进入模型交付检查的确认门槛。",
 			}),
 		},
 		{ additionalProperties: false },

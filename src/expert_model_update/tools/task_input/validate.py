@@ -486,7 +486,7 @@ def parse_args() -> argparse.Namespace:
         "--mode",
         choices=("draft", "confirmed"),
         default="draft",
-        help="draft 检查结构与最小问题映射；confirmed 额外检查进入策略规划的门槛",
+        help="draft 检查结构与最小问题映射；confirmed 额外检查进入模型交付检查的门槛",
     )
     parser.add_argument(
         "--output",
