@@ -7,10 +7,10 @@
   "required": ["report_type", "schema_version", "method_id", "method_version", "action", "status", "issues", "state_sha256", "state", "summary"],
   "properties": {
     "report_type": {"const": "IncrementalRidgeToolReport"},
-    "schema_version": {"const": "0.1"},
+    "schema_version": {"const": "0.3"},
     "method_id": {"const": "incremental_ridge_closed_form"},
-    "method_version": {"const": "0.1"},
-    "action": {"enum": ["inspect", "update"]},
+    "method_version": {"const": "0.3"},
+    "action": {"enum": ["initialize", "inspect", "update"]},
     "status": {"enum": ["passed", "completed", "rejected", "failed"]},
     "issues": {
       "type": "array",

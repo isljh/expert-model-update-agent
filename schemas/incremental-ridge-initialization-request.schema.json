@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incremental-ridge-initialization-request.schema.json",
+  "title": "解析任务头初始化请求",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_type",
+    "schema_version",
+    "method_id",
+    "method_version",
+    "plan_binding",
+    "model",
+    "objective",
+    "statistics"
+  ],
+  "properties": {
+    "report_type": {"const": "IncrementalRidgeInitializationRequest"},
+    "schema_version": {"const": "0.3"},
+    "method_id": {"const": "incremental_ridge_closed_form"},
+    "method_version": {"const": "0.3"},
+    "plan_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "plan_version", "update_plan_sha256"],
+      "properties": {
+        "task_id": {"type": "string", "minLength": 1},
+        "plan_version": {"type": "integer", "minimum": 1},
+        "update_plan_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_features", "output_features", "has_bias", "dtype"],
+      "properties": {
+        "input_features": {"type": "integer", "minimum": 1, "maximum": 256},
+        "output_features": {"type": "integer", "minimum": 1, "maximum": 64},
+        "has_bias": {"type": "boolean"},
+        "dtype": {"const": "float64"}
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loss", "regularization", "regularization_strength", "regularize_bias"],
+      "properties": {
+        "loss": {"const": "sum_squared_error"},
+        "regularization": {"const": "l2"},
+        "regularization_strength": {"type": "number", "minimum": 0},
+        "regularize_bias": {"type": "boolean"}
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_count", "base_feature_dim", "design_feature_dim", "bias_feature_position", "G", "C"],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 1},
+        "base_feature_dim": {"type": "integer", "minimum": 1, "maximum": 256},
+        "design_feature_dim": {"type": "integer", "minimum": 1, "maximum": 257},
+        "bias_feature_position": {"enum": ["last", null]},
+        "G": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}},
+        "C": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}}
+      }
+    }
+  }
+}

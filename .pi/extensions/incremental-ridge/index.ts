@@ -8,10 +8,10 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 interface ToolReport {
 	report_type: "IncrementalRidgeToolReport";
-	schema_version: "0.1";
+	schema_version: "0.3";
 	method_id: "incremental_ridge_closed_form";
-	method_version: "0.1";
-	action: "inspect" | "update";
+	method_version: "0.3";
+	action: "initialize" | "inspect" | "update";
 	status: "passed" | "completed" | "rejected" | "failed";
 	issues: Array<{ code: string; path: string; message: string }>;
 	state_sha256: string | null;
@@ -35,19 +35,19 @@ function pythonExecutable(): string {
 	return process.platform === "win32" ? "python" : "python3";
 }
 
-function isReport(value: unknown, action: "inspect" | "update"): value is ToolReport {
+function isReport(value: unknown, action: "initialize" | "inspect" | "update"): value is ToolReport {
 	if (!value || typeof value !== "object") return false;
 	const item = value as Partial<ToolReport>;
 	return item.report_type === "IncrementalRidgeToolReport" &&
-		item.schema_version === "0.1" &&
+		item.schema_version === "0.3" &&
 		item.method_id === "incremental_ridge_closed_form" &&
-		item.method_version === "0.1" &&
+		item.method_version === "0.3" &&
 		item.action === action &&
 		["passed", "completed", "rejected", "failed"].includes(item.status ?? "") &&
 		Array.isArray(item.issues);
 }
 
-async function runTool(action: "inspect" | "update", payload: unknown, signal?: AbortSignal): Promise<ToolReport> {
+async function runTool(action: "initialize" | "inspect" | "update", payload: unknown, signal?: AbortSignal): Promise<ToolReport> {
 	if (!existsSync(CLI_PATH)) throw new Error("解析增量岭回归工具不存在：" + CLI_PATH);
 	const serialized = JSON.stringify(payload);
 	if (typeof serialized !== "string" || Buffer.byteLength(serialized, "utf8") > MAX_INPUT_BYTES) {
@@ -124,10 +124,10 @@ async function runTool(action: "inspect" | "update", payload: unknown, signal?: 
 const inspectTool = defineTool({
 	name: "inspect_incremental_ridge_state",
 	label: "Inspect Incremental Ridge State",
-	description: "检查解析增量岭回归旧状态、固定目标函数、充分统计量、当前参数和摘要是否一致；不读取项目或数据路径，不修改任何资产。",
+	description: "检查已经初始化的解析任务头状态、bias增广约定、G/C统计量、当前权重与偏置及摘要是否一致；不读取项目或数据路径，不修改任何资产。",
 	promptSnippet: "Inspect a bounded incremental ridge state before project adaptation or update",
 	promptGuidelines: [
-		"Use only for an UpdatePlan that selected incremental_ridge_closed_form v0.1.",
+		"Use only for an UpdatePlan that selected incremental_ridge_closed_form v0.3.",
 		"Do not invent sufficient statistics from checkpoint weights.",
 		"Treat rejected status as a hard stop or replan trigger.",
 	],
@@ -138,15 +138,33 @@ const inspectTool = defineTool({
 	},
 });
 
+const initializeTool = defineTool({
+	name: "initialize_incremental_ridge_state",
+	label: "Initialize Incremental Ridge State",
+	description: "根据固定特征提取器在原训练数据上形成的G/C统计量，直接求解解析任务头的初始权重和偏置；不要求使用原checkpoint中的任务头参数。",
+	promptSnippet: "Initialize an analytic task head from historical G and C before incremental updates",
+	promptGuidelines: [
+		"Use after the execution Agent has identified and frozen the feature extractor and confirmed the task-head input dimension.",
+		"For classification, pass C computed from fixed-order one-hot targets; for regression, pass numeric target columns.",
+		"Do not compare the original gradient-trained task head with the analytic solution; the returned parameters are intended to replace that task head after evaluation.",
+		"The returned state is not a saved checkpoint; save and strictly reload a new artifact without overwriting the original.",
+	],
+	parameters: Type.Object({ request: Type.Any({ description: "符合 incremental-ridge-initialization-request.schema.json 的完整请求。" }) }, { additionalProperties: false }),
+	async execute(_toolCallId, params, signal) {
+		const result = await runTool("initialize", params.request, signal);
+		return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: result };
+	},
+});
+
 const updateTool = defineTool({
 	name: "update_incremental_ridge",
 	label: "Update Incremental Ridge",
-	description: "对已标准化的小规模新批次累计充分统计量并求解固定的平方误差加 L2 正则目标；不扫描项目、不写 checkpoint、不改变目标函数。",
+	description: "对固定特征提取器产生的小规模新批次按bias约定构造设计矩阵，累计G/C并更新解析任务头；支持固定类别顺序的one-hot分类目标和连续回归目标，不扫描项目、不写checkpoint。",
 	promptSnippet: "Run a bounded closed-form incremental ridge update after execution preconditions are verified",
 	promptGuidelines: [
-		"Call only after human plan approval and execution-agent verification of the project, objective, feature contract, and old state binding.",
+		"Call only after human plan approval and successful analytic-head initialization or state inspection.",
 		"Pass the complete request bound to task_id, plan_version, and UpdatePlan SHA-256.",
-		"Do not use this tool for classification, non-squared losses, neural-network Linear layers, changed feature contracts, or checkpoint-only state.",
+		"Use one-hot target rows for fixed-class classification and numeric target rows for regression; do not update the frozen feature extractor here.",
 		"The returned state is not a saved project checkpoint; the execution Agent must save and verify project artifacts without overwriting the original.",
 	],
 	parameters: Type.Object({ request: Type.Any({ description: "符合 incremental-ridge-update-request.schema.json 的完整请求。" }) }, { additionalProperties: false }),
@@ -157,6 +175,7 @@ const updateTool = defineTool({
 });
 
 export default function incrementalRidgeExtension(pi: ExtensionAPI) {
+	pi.registerTool(initializeTool);
 	pi.registerTool(inspectTool);
 	pi.registerTool(updateTool);
 }

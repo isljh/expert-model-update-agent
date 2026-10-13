@@ -2,38 +2,40 @@
   "report_type": "IncrementalLearningMethodCard",
   "schema_version": "0.1",
   "method_id": "incremental_ridge_closed_form",
-  "method_version": "0.1",
+  "method_version": "0.3",
   "artifact_kind": "full_method",
   "name": {
     "zh": "基于充分统计量的解析增量岭回归",
     "en": "Closed-form Incremental Ridge Regression with Sufficient Statistics"
   },
   "decision_contract": {
-    "supported_task": "regression",
-    "supported_model": "affine_linear",
+    "contract_audience": "update_decision_agent_and_update_execution_agent",
+    "supported_task": "classification_or_regression",
+    "supported_model": "fixed_feature_extractor_with_affine_analytic_head",
     "scenario": "same_task_new_samples",
     "fixed_objective": "sum_squared_error + lambda * l2_weight_penalty",
     "hard_preconditions": [
-      "模型是单输出或多输出仿射线性回归",
-      "训练目标是平方误差总和加可为零的 L2 参数正则",
-      "旧状态包含与当前参数一致的 Gram 矩阵和特征-目标交叉乘积",
-      "新旧输入维度、输出维度、特征顺序、目标语义和预处理保持不变",
-      "更新期间不改变 lambda 和 intercept 正则规则"
+      "已确定并冻结产生任务头输入特征的模型部分",
+      "旧G和C由原训练数据在该固定特征上计算；分类标签使用固定列顺序的one-hot，回归标签使用连续目标列",
+      "带bias时统计量基于末列为全1列的增广设计矩阵",
+      "初始化阶段使用平方误差总和加可为零的L2正则重新求解解析任务头，不要求沿用原梯度任务头参数",
+      "后续更新期间不改变特征维度、输出维度、lambda和bias正则规则"
     ],
     "ineligible_when": [
-      "只有旧权重且无法取得旧充分统计量或旧数据",
-      "损失为交叉熵、MAE、Huber、分位数或其他非平方损失",
-      "参数正则包含 L1 或其他非 L2 项",
-      "目标对象只是非线性网络中的一个 Linear 层",
-      "输入或输出契约发生变化"
+      "只有旧权重且无法取得旧G和C或旧数据",
+      "更新期间还需要改变特征提取器参数",
+      "解析任务头需要使用L1或其他非L2正则",
+      "任务输出不能表示为固定维度的数值目标矩阵",
+      "输入输出维度、含义、排列顺序或预处理发生变化"
     ],
     "structure_growth": "forbidden",
     "old_sample_replay": "not_required_when_sufficient_statistics_are_valid"
   },
   "execution_contract": {
+    "contract_role": "machine_readable_method_selection_and_execution_constraints",
     "objective_scaling": "sum_not_mean",
-    "state": ["sample_count", "gram_matrix", "feature_target_cross_product", "parameters"],
-    "parameter_policy": "replace_weight_and_optional_bias_without_changing_shape",
+    "state": ["sample_count", "base_feature_dim", "design_feature_dim", "bias_feature_position", "G", "C", "parameters"],
+    "parameter_policy": "initialize_then_replace_affine_task_head_and_report_incremental_delta_weight_and_delta_bias",
     "retention_mechanism": "accumulated_unregularized_sufficient_statistics",
     "numerical_policy": [
       "使用 float64",
@@ -42,13 +44,14 @@
       "条件数大于 1e12 时标记 ill_conditioned"
     ],
     "execution_preconditions": [
-      "执行 Agent 已核实交付模型的目标函数、特征契约和 checkpoint 绑定",
+      "执行 Agent 已确定冻结范围、任务头输入位置、bias设置和checkpoint绑定",
+      "初始化阶段允许原任务头由交叉熵或其他损失训练，但初始化后以解析任务头及其G和C作为后续更新起点",
       "已批准的 UpdatePlan 明确选择本方法及同一版本",
       "原 checkpoint 和原增量状态不会被覆盖"
     ],
     "replan_triggers": [
-      "旧状态与参数不一致",
-      "新批次特征或目标契约不匹配",
+      "初始化后的解析状态与参数不一致",
+      "新批次特征或标签矩阵维度不匹配",
       "法方程不可解或出现非有限数值",
       "交付模型的实际目标函数或模型形式与方法卡不一致"
     ],
@@ -65,6 +68,12 @@
       "kind": "python_library",
       "entrypoint": "expert_model_update.methods.incremental_ridge",
       "purpose": "检查旧状态并执行充分统计量更新和线性方程求解。"
+    },
+    {
+      "component_id": "initialize_incremental_ridge_state",
+      "kind": "pi_tool",
+      "entrypoint": "initialize_incremental_ridge_state",
+      "purpose": "根据旧G和C求解解析任务头初始参数，不比较或沿用原梯度任务头参数。"
     },
     {
       "component_id": "inspect_incremental_ridge_state",

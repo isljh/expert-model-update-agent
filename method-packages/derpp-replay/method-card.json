@@ -1,0 +1,109 @@
+{
+  "report_type": "IncrementalLearningMethodCard",
+  "schema_version": "0.1",
+  "method_id": "derpp_replay",
+  "method_version": "0.1",
+  "artifact_kind": "full_method",
+  "name": {
+    "zh": "DER++ 版本式回放正则化",
+    "en": "DER++ with Versioned Replay"
+  },
+  "decision_contract": {
+    "contract_audience": "update_decision_agent_and_update_execution_agent",
+    "supported_task": "classification loss follows DER++; regression is an explicit project extension",
+    "supported_model": "PyTorch supervised model with a stable replayable input and fixed-size training output",
+    "scenario": "same_task_new_samples",
+    "objective": "new-task loss + alpha * replay-output MSE + beta * replay supervised loss",
+    "hard_preconditions": [
+      "存在少量可重新读取的历史代表性样本及其真实标签",
+      "历史输出由样本加入回放池时的确定模型版本在评估模式下生成并冻结保存",
+      "增量前后输入预处理、任务含义、输出含义、输出顺序和输出维度不变",
+      "执行层能够提供与原任务目标一致的主损失函数",
+      "UpdatePlan 已明确训练范围、优化器、学习率、alpha、beta、批次方案和回放保留策略"
+    ],
+    "ineligible_when": [
+      "没有可回放的历史样本",
+      "类别集合、回归指标或输出维度发生变化",
+      "历史样本无法按原规则完成输入处理",
+      "模型输出规模不适合保存和回放",
+      "主任务目标发生变化但尚未重新决策"
+    ],
+    "upstream_logits_required": false,
+    "upstream_logits_reason": "系统可使用已交付模型和代表性历史样本自行生成；缺少任一项时不能建立该样本的 DER++ 历史约束"
+  },
+  "execution_contract": {
+    "contract_role": "machine_readable_method_selection_and_execution_constraints",
+    "classification_output": "主损失之前的 logits",
+    "regression_output": "主损失之前的连续预测值",
+    "replay_state": [
+      "inputs",
+      "targets",
+      "stored_outputs",
+      "sample_ids",
+      "source_versions"
+    ],
+    "snapshot_policy": "每个模型版本批准后只为新选入样本生成输出；既有样本的 stored_outputs 不得重算",
+    "buffer_contract": {
+      "capacity_unit": "number_of_sample_records",
+      "unbounded_value": "None means no API-level record limit, not unlimited memory",
+      "storage": "detached cloned CPU tensors plus unique sample_id and source_version",
+      "write_policy": "append-only and batch-atomic after validation",
+      "overflow_policy": "reject the whole append before mutation",
+      "automatic_eviction": false,
+      "implemented_replacement_policies": [],
+      "sampling": "uniform random without replacement within one call; samples may recur across calls",
+      "automatic_balancing": false,
+      "persistence": "state_dict/from_state_dict; the execution layer owns the on-disk artifact"
+    },
+    "capacity_policy": "capacity is chosen by UpdatePlan; v0.1 never truncates, evicts, replaces, or resizes automatically",
+    "model_mode_policy": "历史输出在 eval/no_grad 下捕获；训练步骤使用执行层预先配置的模块训练状态",
+    "parameter_policy": "由执行层和 UpdatePlan 决定全量微调或部分参数更新，核心方法包不擅自冻结或解冻参数",
+    "loss_contract": {
+      "new_task_term": "primary_loss(current_outputs, current_targets)",
+      "replay_consistency_term": "mean_squared_error(replay_outputs, stored_outputs) with mean reduction",
+      "replay_supervised_term": "primary_loss(replay_outputs, replay_targets)",
+      "weight_rule": "alpha >= 0, beta >= 0, and at least one is positive",
+      "primary_loss_rule": "the caller provides the task-consistent loss and it must return a scalar tensor"
+    },
+    "replan_triggers": [
+      "历史样本或固定输出缺失、损坏或不能按原预处理读取",
+      "输入结构、标签形状、输出形状、输出含义或类别顺序变化",
+      "回放池容量不足且没有已批准的保留或扩容方案",
+      "主任务损失、更新参数范围或模型输出选择无法明确",
+      "旧任务验证指标退化超过 UpdatePlan 的批准阈值",
+      "训练出现非有限损失或新 checkpoint 无法严格加载"
+    ],
+    "validation_requirements": [
+      "分别报告新样本主损失、历史输出一致性损失和历史标签监督损失",
+      "独立评估新数据和历史验证数据，不以训练损失代替能力保持证据",
+      "确认回放池中的历史输出在后续版本未被重算或覆盖"
+    ],
+    "limitations": [
+      "核心库不加载外部模型、checkpoint 或数据路径",
+      "核心库不选择代表性样本、不创建优化器、不保存新 checkpoint",
+      "v0.1 未实现自动类别均衡、按版本配额、reservoir sampling、FIFO、磁盘级数据集或完整训练作业",
+      "回归支持是本项目扩展，不表述为原论文标准 DER++"
+    ]
+  },
+  "components": [
+    {
+      "component_id": "derpp_core",
+      "kind": "python_library",
+      "entrypoint": "expert_model_update.methods.derpp",
+      "purpose": "保存版本式回放快照、计算 DER++ 三项损失并执行单次优化器更新。"
+    },
+    {
+      "component_id": "derpp_contract_tests",
+      "kind": "validation_rule",
+      "entrypoint": "tests.test_derpp",
+      "purpose": "验证损失公式、历史输出不可变、回放状态恢复、容量失败和一次训练更新。"
+    }
+  ],
+  "references": [
+    {
+      "kind": "paper",
+      "citation": "Buzzega et al. Dark Experience for General Continual Learning: a Strong, Simple Baseline. NeurIPS 2020.",
+      "url": "https://arxiv.org/abs/2004.07211"
+    }
+  ]
+}

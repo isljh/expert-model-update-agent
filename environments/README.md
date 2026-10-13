@@ -17,3 +17,5 @@ conda run -n model-instantiation-safe python -c "import torch, torchvision, yaml
 ## 增量方法组件
 
 解析增量岭回归组件依赖 NumPy，最小依赖见 [`requirements-incremental-methods.txt`](requirements-incremental-methods.txt)。Pi Extension 默认使用当前 `python`/`python3`；部署环境可通过 `INCREMENTAL_METHODS_PYTHON` 指定解释器。该环境只运行标准化矩阵计算，不因此获得读取外部模型资产或业务数据的额外授权。
+
+`derpp_replay` 和 `star_weight_perturbation` 是由任务专用训练执行层调用的 PyTorch 组件，不在上述 NumPy 最小环境中运行。它们应使用与已验证交付模型兼容、并由 `UpdatePlan` 批准的训练环境；方法包本身不擅自安装或升级 PyTorch。

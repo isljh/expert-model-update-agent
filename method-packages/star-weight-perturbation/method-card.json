@@ -1,0 +1,114 @@
+{
+  "report_type": "IncrementalLearningMethodCard",
+  "schema_version": "0.1",
+  "method_id": "star_weight_perturbation",
+  "method_version": "0.1",
+  "artifact_kind": "mechanism",
+  "name": {
+    "zh": "STAR 分类权重扰动稳定性组件",
+    "en": "STAR Classification Weight-Perturbation Stability Component"
+  },
+  "decision_contract": {
+    "contract_audience": "update_decision_agent_and_update_execution_agent",
+    "supported_task": "single_label_classification",
+    "supported_model": "PyTorch classification model exposing a fixed class-order logits tensor shaped [batch, classes]",
+    "scenario": "rehearsal_based_continual_update",
+    "artifact_role": "optional enhancement; not a standalone update method",
+    "requires_base_rehearsal_method": true,
+    "objective": "reduce KL(reference probabilities || locally worst perturbed probabilities) on currently correct replay samples",
+    "hard_preconditions": [
+      "已选择能够提供历史样本和真实类别标签的基础回放方法",
+      "模型输出可按明确 selector 取得二维分类 logits，且类别顺序和输出维度不变",
+      "回放标签是一维整数类别索引，并与 logits 类别范围一致",
+      "至少存在一个已批准的二维及以上可训练浮点参数范围",
+      "UpdatePlan 已明确 STAR 参数范围、regularization_weight、perturbation_ratio、noise_scale、ascent_steps、min_correct_samples 和随机种子策略",
+      "执行层能够在基础方法 backward 之前累积 STAR 梯度，并在同一次 optimizer.step 中合并更新"
+    ],
+    "ineligible_when": [
+      "任务是回归、多标签分类、生成任务或没有明确类别概率语义",
+      "没有可重新读取的历史样本及真实类别标签",
+      "分类头、类别集合、类别顺序或输出维度发生变化",
+      "模型只允许闭式解析更新，或批准范围内没有可反向传播的二维及以上参数",
+      "基础方法不是回放式方法，且没有单独批准 STAR 所需历史样本机制",
+      "随机层和模型状态无法按照执行契约稳定控制"
+    ]
+  },
+  "execution_contract": {
+    "contract_role": "machine_readable_composable_gradient_mechanism",
+    "public_entrypoint": "expert_model_update.methods.star",
+    "composition_order": [
+      "optimizer.zero_grad(set_to_none=True)",
+      "accumulate_star_gradients on one replay batch",
+      "compute and backward the approved base rehearsal loss",
+      "apply any approved clipping or scaler logic",
+      "optimizer.step()"
+    ],
+    "classification_contract": {
+      "model_output": "pre-loss logits shaped [batch, classes] with classes >= 2",
+      "probability_mapping": "softmax(logits, dim=1)",
+      "target": "one integer class index per sample",
+      "eligible_samples": "argmax(reference_logits, dim=1) equals target",
+      "divergence": "KL(reference probabilities || perturbed probabilities), mean over eligible samples"
+    },
+    "perturbation_contract": {
+      "initial_noise": "per selected parameter: randn_like(weight) * noise_scale * ||weight||_2",
+      "ascent": "one or more normalized gradient-ascent steps; total requested ratio is divided equally across ascent_steps",
+      "normalization": "per selected parameter using ||weight||_2 / (||gradient||_2 + 1e-20)",
+      "default_parameter_policy": "all requires_grad floating parameters with ndim > 1",
+      "excluded_by_default": "bias vectors, normalization affine vectors, frozen parameters, buffers and non-floating parameters",
+      "temporary_state": "all temporary weight perturbations must be removed before return, including exceptional exits"
+    },
+    "model_mode_policy": "STAR-only forwards run in eval mode and restore every module's previous training flag; the base method still uses the caller-configured training modes",
+    "gradient_policy": "compute_star_gradients never changes .grad; accumulate_star_gradients adds detached STAR gradients to existing gradients and never clears them",
+    "skip_policy": "if correct replay count is below min_correct_samples, return skipped=true with reason insufficient_correct_replay_samples and add no gradient",
+    "replan_triggers": [
+      "logits or labels do not satisfy the classification contract",
+      "selected parameters are missing, frozen, one-dimensional, non-floating or disconnected from the logits",
+      "reference logits, perturbed logits, KL loss or gradients contain non-finite values",
+      "correct replay samples repeatedly fall below the approved minimum",
+      "temporary parameter restoration cannot be verified",
+      "旧任务指标退化或新任务学习受阻，超过 UpdatePlan 的批准阈值",
+      "资源开销超过批准的训练时间或显存边界"
+    ],
+    "validation_requirements": [
+      "验证 STAR 调用前后模型参数逐值一致，只有 optimizer.step 才产生真实更新",
+      "分别记录回放批次大小、正确样本数、跳过原因、原始 KL、加权 STAR 损失和逐参数扰动范数",
+      "验证 STAR 梯度与基础方法梯度在同一步中累积，而不是被后续 zero_grad 覆盖",
+      "独立比较基础方法与基础方法加 STAR 的新旧数据指标和资源开销",
+      "确认评估使用独立历史验证数据，不能用 STAR 训练 KL 代替旧能力证据"
+    ],
+    "limitations": [
+      "v0.1 只支持单标签分类，不实现回归或多标签扩展",
+      "核心库不管理回放池、不计算基础持续学习损失、不创建优化器、不执行 optimizer.step",
+      "核心库不加载模型、checkpoint 或数据路径，也不保存训练产物",
+      "局部最坏扰动是一阶近似，不保证与未来真实参数更新方向一致",
+      "eval 模式的 STAR 前向是本项目为隔离随机层和可变缓冲区采用的明确实现策略"
+    ]
+  },
+  "components": [
+    {
+      "component_id": "star_gradient_core",
+      "kind": "python_library",
+      "entrypoint": "expert_model_update.methods.star",
+      "purpose": "计算并累积分类回放样本上的 STAR 一阶近似稳定性梯度，同时保证临时扰动恢复。"
+    },
+    {
+      "component_id": "star_contract_tests",
+      "kind": "validation_rule",
+      "entrypoint": "tests.test_star",
+      "purpose": "验证分类边界、梯度组合、正确样本跳过、参数与模式恢复、输出选择及方法卡身份。"
+    }
+  ],
+  "references": [
+    {
+      "kind": "paper",
+      "citation": "Eskandar et al. STAR: Stability-Inducing Weight Perturbation for Continual Learning. ICLR 2025.",
+      "url": "https://openreview.net/forum?id=6N5OM5Duuj"
+    },
+    {
+      "kind": "documentation",
+      "citation": "Official STAR implementation, Gnomy17/STAR_CL, MIT License.",
+      "url": "https://github.com/Gnomy17/STAR_CL"
+    }
+  ]
+}

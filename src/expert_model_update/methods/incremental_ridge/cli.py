@@ -16,14 +16,15 @@ from expert_model_update.methods.incremental_ridge.core import (
     METHOD_ID,
     METHOD_VERSION,
     SCHEMA_VERSION,
+    initialize_incremental_ridge,
     inspect_state,
     update_incremental_ridge,
 )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="检查或更新解析增量岭回归状态。")
-    parser.add_argument("action", choices=("inspect", "update"))
+    parser = argparse.ArgumentParser(description="初始化、检查或更新解析增量岭回归状态。")
+    parser.add_argument("action", choices=("initialize", "inspect", "update"))
     parser.add_argument("input", nargs="?", type=Path)
     parser.add_argument("--stdin", action="store_true", dest="read_stdin")
     args = parser.parse_args()
@@ -65,7 +66,12 @@ def main() -> int:
         return 2
 
     try:
-        report = inspect_state(payload) if args.action == "inspect" else update_incremental_ridge(payload)
+        if args.action == "initialize":
+            report = initialize_incremental_ridge(payload)
+        elif args.action == "inspect":
+            report = inspect_state(payload)
+        else:
+            report = update_incremental_ridge(payload)
     except Exception as exc:  # Keep the process boundary explicit for the harness.
         report = failure(args.action, "EXECUTION_ERROR", f"解析增量岭回归工具执行失败：{type(exc).__name__}: {exc}")
         print(json.dumps(report, ensure_ascii=False))

@@ -12,7 +12,6 @@
     "state_version",
     "model",
     "objective",
-    "feature_contract",
     "statistics",
     "parameters",
     "model_binding",
@@ -20,50 +19,43 @@
   ],
   "properties": {
     "report_type": {"const": "IncrementalRidgeState"},
-    "schema_version": {"const": "0.1"},
+    "schema_version": {"const": "0.3"},
     "method_id": {"const": "incremental_ridge_closed_form"},
-    "method_version": {"const": "0.1"},
+    "method_version": {"const": "0.3"},
     "state_version": {"type": "integer", "minimum": 1},
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["input_features", "output_features", "fit_intercept", "dtype"],
+      "required": ["input_features", "output_features", "has_bias", "dtype"],
       "properties": {
         "input_features": {"type": "integer", "minimum": 1, "maximum": 256},
         "output_features": {"type": "integer", "minimum": 1, "maximum": 64},
-        "fit_intercept": {"type": "boolean"},
+        "has_bias": {"type": "boolean"},
         "dtype": {"const": "float64"}
       }
     },
     "objective": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["loss", "regularization", "regularization_strength", "regularize_intercept"],
+      "required": ["loss", "regularization", "regularization_strength", "regularize_bias"],
       "properties": {
         "loss": {"const": "sum_squared_error"},
         "regularization": {"const": "l2"},
         "regularization_strength": {"type": "number", "minimum": 0},
-        "regularize_intercept": {"type": "boolean"}
-      }
-    },
-    "feature_contract": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["feature_schema_sha256", "target_schema_sha256", "preprocessing_ref"],
-      "properties": {
-        "feature_schema_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "target_schema_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "preprocessing_ref": {"type": ["string", "null"]}
+        "regularize_bias": {"type": "boolean"}
       }
     },
     "statistics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sample_count", "gram_matrix", "feature_target_cross_product"],
+      "required": ["sample_count", "base_feature_dim", "design_feature_dim", "bias_feature_position", "G", "C"],
       "properties": {
         "sample_count": {"type": "integer", "minimum": 1},
-        "gram_matrix": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}},
-        "feature_target_cross_product": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}}
+        "base_feature_dim": {"type": "integer", "minimum": 1, "maximum": 256},
+        "design_feature_dim": {"type": "integer", "minimum": 1, "maximum": 257},
+        "bias_feature_position": {"enum": ["last", null]},
+        "G": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}},
+        "C": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}}}
       }
     },
     "parameters": {
